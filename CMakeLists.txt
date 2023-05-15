@@ -14,3 +14,9 @@ add_executable (
 	deps/Unity/src/unity.c)
 
 target_include_directories (tests PRIVATE src deps/Unity/src)
+
+add_executable (
+	pangolin
+	src/pangolin.c)
+
+target_include_directories (pangolin PRIVATE src)
