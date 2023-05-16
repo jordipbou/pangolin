@@ -5,101 +5,81 @@ void setUp() {}
 
 void tearDown() {}
 
-void test_INT() {
-	char s[255];
-	X* x = init();
-	P p;
+void test_LIST() {
+	O l;
 
-	PUSHC(x, INT, 7);
-	PUSHC(x, INT, 11);
+	p_alloc(&l, LIST, 5, sizeof(O));
 
-	s[0] = 0;
-	TEST_ASSERT_EQUAL_STRING("7 11 ", dump_stack(s, x, 0));
+	TEST_ASSERT_EQUAL_INT(LIST, l.t);
+	TEST_ASSERT_EQUAL_INT(1, l.m);
+	TEST_ASSERT_EQUAL_INT(5, l.c);
+	TEST_ASSERT_EQUAL_INT(0, l.l);
+	TEST_ASSERT_NOT_NULL(l.v.a);
 
-	p = POP(x);
+	LPUSHI(&l, 7);
 
-	TEST_ASSERT_EQUAL_INT(p.t, INT);
-	TEST_ASSERT_EQUAL_INT(p.v.c, 11);
+	TEST_ASSERT_EQUAL_INT(1, l.l);
+	TEST_ASSERT_EQUAL_INT(7, LTOSI(&l));
 
-	s[0] = 0;
-	TEST_ASSERT_EQUAL_STRING("7 ", dump_stack(s, x, 0));
+	LPUSHI(&l, 11);
 
-	p = POP(x);
+	TEST_ASSERT_EQUAL_INT(2, l.l);
+	TEST_ASSERT_EQUAL_INT(11, LTOSI(&l));
+	TEST_ASSERT_EQUAL_INT(7, LNOSI(&l));
 
-	TEST_ASSERT_EQUAL_INT(p.t, INT);
-	TEST_ASSERT_EQUAL_INT(p.v.c, 7);
+	LPUSHI(&l, 13);
 
-	s[0] = 0; TEST_ASSERT_EQUAL_STRING("", dump_stack(s, x, 0));
+	TEST_ASSERT_EQUAL_INT(3, l.l);
+	TEST_ASSERT_EQUAL_INT(13, LTOSI(&l));
+	TEST_ASSERT_EQUAL_INT(11, LNOSI(&l));
+	TEST_ASSERT_EQUAL_INT(7, LNNOSI(&l));
 
-	free(x);
+	LPUSHF(&l, 3.1415);
+
+	TEST_ASSERT_EQUAL_INT(4, l.l);
+	TEST_ASSERT_EQUAL_FLOAT(3.1415, LTOSF(&l));
+	TEST_ASSERT_EQUAL_INT(13, LNOSI(&l));
+
+	p_free(l.v.a);
 }
 
-void test_STR() {
-	char s[255];
-	X* x = init();
+void test_INT_ARRAY() {
+	O ia;
 
-	PUSHS(x, "test string", 11);
+	p_alloc(&ia, INT_ARRAY, 5, sizeof(int64_t));
 
-	s[0] = 0; TEST_ASSERT_EQUAL_STRING("\"test string\" ", dump_stack(s, x, 0));
+	TEST_ASSERT_EQUAL_INT(INT_ARRAY, ia.t);
+	TEST_ASSERT_EQUAL_INT(1, ia.m);
+	TEST_ASSERT_EQUAL_INT(5, ia.c);
+	TEST_ASSERT_EQUAL_INT(0, ia.l);
+	TEST_ASSERT_NOT_NULL(ia.v.a);
 
-	free(x);
-}
+	IAPUSHI(&ia, 7);
 
-void test_FLOAT() {
-	char s[255];
-	X* x = init();
+	TEST_ASSERT_EQUAL_INT(1, ia.l);
+	TEST_ASSERT_EQUAL_INT(7, IATOSI(&ia));
 
-	PUSHC(x, INT, 7);
-	PUSHF(x, FLOAT, 3.1415);
+	IAPUSHI(&ia, 11);
 
-	s[0] = 0; TEST_ASSERT_EQUAL_STRING("7 3.141500 ", dump_stack(s, x, 0));
+	TEST_ASSERT_EQUAL_INT(2, ia.l);
+	TEST_ASSERT_EQUAL_INT(11, IATOSI(&ia));
+	TEST_ASSERT_EQUAL_INT(7, IANOSI(&ia));
 
-	free(x);
-}
+	IAPUSHI(&ia, 13);
 
-void test_parse_token() {
-	char s[255];
-	X* x = init();
+	TEST_ASSERT_EQUAL_INT(3, ia.l);
+	TEST_ASSERT_EQUAL_INT(13, IATOSI(&ia));
+	TEST_ASSERT_EQUAL_INT(11, IANOSI(&ia));
+	TEST_ASSERT_EQUAL_INT(7, IANNOSI(&ia));
 
-	x->b = "test string";
-	x->bl = 11;
-	x->in = 0;
-
-	parse_token(x);
-	parse_token(x);
-	parse_token(x);
-
-	s[0] = 0; TEST_ASSERT_EQUAL_STRING("\"test\" \"string\" \"\" ", dump_stack(s, x, 0));
-
-	free(x);
-}
-
-void test_parse_until() {
-	char s[255];
-	X* x = init();
-
-	x->b = "  s\" string literal\"  ";
-	x->bl = 21;
-	x->in = 0;
-	
-	parse_token(x);
-	PUSHC(x, CHAR, '"');
-	parse_until(x);
-
-	s[0] = 0; TEST_ASSERT_EQUAL_STRING("\"s\"\" \"string literal\" ", dump_stack(s, x, 0));
-
-	free(x);
+	p_free(ia.v.a);
 }
 
 int main() {
 	UNITY_BEGIN();
 
-	RUN_TEST(test_INT);
-	RUN_TEST(test_STR);
-	RUN_TEST(test_FLOAT);
-
-	RUN_TEST(test_parse_token);
-	RUN_TEST(test_parse_until);
+	RUN_TEST(test_LIST);
+	RUN_TEST(test_INT_ARRAY);
 
 	return UNITY_END();
 }
