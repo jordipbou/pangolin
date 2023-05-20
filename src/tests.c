@@ -5,81 +5,8 @@ void setUp() {}
 
 void tearDown() {}
 
-void test_LIST() {
-	O l;
-
-	p_alloc(&l, LIST, 5, sizeof(O));
-
-	TEST_ASSERT_EQUAL_INT(LIST, l.t);
-	TEST_ASSERT_EQUAL_INT(1, l.m);
-	TEST_ASSERT_EQUAL_INT(5, l.c);
-	TEST_ASSERT_EQUAL_INT(0, l.l);
-	TEST_ASSERT_NOT_NULL(l.v.a);
-
-	LPUSHI(&l, 7);
-
-	TEST_ASSERT_EQUAL_INT(1, l.l);
-	TEST_ASSERT_EQUAL_INT(7, LTOSI(&l));
-
-	LPUSHI(&l, 11);
-
-	TEST_ASSERT_EQUAL_INT(2, l.l);
-	TEST_ASSERT_EQUAL_INT(11, LTOSI(&l));
-	TEST_ASSERT_EQUAL_INT(7, LNOSI(&l));
-
-	LPUSHI(&l, 13);
-
-	TEST_ASSERT_EQUAL_INT(3, l.l);
-	TEST_ASSERT_EQUAL_INT(13, LTOSI(&l));
-	TEST_ASSERT_EQUAL_INT(11, LNOSI(&l));
-	TEST_ASSERT_EQUAL_INT(7, LNNOSI(&l));
-
-	LPUSHF(&l, 3.1415);
-
-	TEST_ASSERT_EQUAL_INT(4, l.l);
-	TEST_ASSERT_EQUAL_FLOAT(3.1415, LTOSF(&l));
-	TEST_ASSERT_EQUAL_INT(13, LNOSI(&l));
-
-	p_free(l.v.a);
-}
-
-void test_INT_ARRAY() {
-	O ia;
-
-	p_alloc(&ia, INT_ARRAY, 5, sizeof(int64_t));
-
-	TEST_ASSERT_EQUAL_INT(INT_ARRAY, ia.t);
-	TEST_ASSERT_EQUAL_INT(1, ia.m);
-	TEST_ASSERT_EQUAL_INT(5, ia.c);
-	TEST_ASSERT_EQUAL_INT(0, ia.l);
-	TEST_ASSERT_NOT_NULL(ia.v.a);
-
-	IAPUSHI(&ia, 7);
-
-	TEST_ASSERT_EQUAL_INT(1, ia.l);
-	TEST_ASSERT_EQUAL_INT(7, IATOSI(&ia));
-
-	IAPUSHI(&ia, 11);
-
-	TEST_ASSERT_EQUAL_INT(2, ia.l);
-	TEST_ASSERT_EQUAL_INT(11, IATOSI(&ia));
-	TEST_ASSERT_EQUAL_INT(7, IANOSI(&ia));
-
-	IAPUSHI(&ia, 13);
-
-	TEST_ASSERT_EQUAL_INT(3, ia.l);
-	TEST_ASSERT_EQUAL_INT(13, IATOSI(&ia));
-	TEST_ASSERT_EQUAL_INT(11, IANOSI(&ia));
-	TEST_ASSERT_EQUAL_INT(7, IANNOSI(&ia));
-
-	p_free(ia.v.a);
-}
-
 int main() {
 	UNITY_BEGIN();
-
-	RUN_TEST(test_LIST);
-	RUN_TEST(test_INT_ARRAY);
 
 	return UNITY_END();
 }

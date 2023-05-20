@@ -2,19 +2,32 @@
 #include<string.h>
 #include"pangolin.h"
 
-int main() {
-/*
-	char s[255];
-	char b[255];
-	X* x = init();
+C repl(X* x) {
+	char buf[255];
+	C i;
+	char k;
 
 	do {
 		printf("IN: ");
-		fgets(s, 255, stdin);
-		PUSHS(x, s, strlen(s));
-		eval(x);
-		if (x->err) { printf("ERROR: %ld\n", x->err); x->err = 0; }
-		b[0] = 0; printf("%s", dump_stack(b, x, 1));
-	} while (1);
-*/
+		for (i = 0; i < 255; i++) { buf[i] = 0; }
+		fgets(buf, 255, stdin);
+		x->ip = buf;
+		i = inner(x);
+		if (!x->trace && x->sp != 0) { 
+			buf[0] = 0; 
+			sprintf(buf, "%s", dump_stack(buf, x, 1));
+			printf("%s", buf);
+		}
+		if (i == ERR_EXIT) { return ERR_EXIT; }
+		if (i != ERR_OK) { 
+			buf[0] = 0; 
+			printf("ERROR: %ld\n", i);
+		}
+	} while(1);
+}
+
+int main() {
+	X* x = init();
+
+	repl(x);
 }
