@@ -2,6 +2,7 @@
 #include<string.h>
 #include"pangolin.h"
 
+/*
 C repl(X* x) {
 	char buf[255];
 	C i;
@@ -30,4 +31,8 @@ int main() {
 	X* x = init();
 
 	repl(x);
+}
+*/
+
+int main() {
 }
