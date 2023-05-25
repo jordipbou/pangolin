@@ -16,7 +16,7 @@ C repl(X* x) {
 		i = inner(x);
 		if (!x->trace && x->sp != 0) { 
 			buf[0] = 0; 
-			sprintf(buf, "%s", dump_stack(buf, x, 1));
+			sprintf(buf, "%s", dump_stack_stack(buf, x, 1));
 			printf("%s", buf);
 		}
 		if (i == ERR_EXIT) { return ERR_EXIT; }
@@ -34,5 +34,45 @@ int main() {
 }
 */
 
+/*
+void fib(X* x) {
+	B buf[255];
+	DUP(x);
+	PUSHI(x, NUMBER, 1);
+	GT(x);
+	if (POPI(x)) {
+		PUSHI(x, NUMBER, 1);
+		SUB(x);
+		DUP(x);
+		PUSHI(x, NUMBER, 1);
+		SUB(x);
+		fib(x);
+		SWAP(x);
+		fib(x);
+		ADD(x);
+	}
+}
+
 int main() {
+	X* x = init();
+
+	PUSHI(x, NUMBER, 36);
+	fib(x);
+
+	printf("OUT: %ld\n", TS(x).v.i);
+}
+*/
+
+int main() {
+	B buf[255];
+	X* x = init();
+
+	x->ip = "111111111111111111111111111111111111+++++++++++++++++++++++++++++++++++[d11+<][][1-d1-][+]b";
+	/* x->ip = "#8[:d1>?1-d1-;s;+]i"; */
+	/* x->ip = "1[11+][111++]?"; */
+	inner(x);
+
+	memset(buf, 0, sizeof buf);
+	dump_stack(buf, x, 0);
+	printf("%s\n", buf);
 }

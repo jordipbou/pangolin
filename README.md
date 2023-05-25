@@ -4,7 +4,9 @@ Concatenative imperative/functional language without garbage collection.
 
 Tries to be like Joy/Factor, while maintaining low level features.
 
-# Representation
+# External representation
+
+## Continuation
 
 		  <main stack> : <call stack>   << <text input>
 
@@ -15,3 +17,5 @@ Tries to be like Joy/Factor, while maintaining low level features.
 							   5 : d << *
 							 5 5 : *
 							  25 :
+
+# Data types
