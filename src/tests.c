@@ -31,7 +31,7 @@ void test_PUSH() {
 }
 
 void test_PUSHF() {
-	PUSHF(x, NUMBER, 3.1415);
+	PUSHF(x, 3.1415);
 
 	TEST_ASSERT_EQUAL_INT(1, x->sp);
 	TEST_ASSERT_EQUAL_INT(3.1415, TS(x).v.f);

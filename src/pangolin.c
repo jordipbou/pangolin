@@ -67,12 +67,18 @@ int main() {
 	B buf[255];
 	X* x = init();
 
-	x->ip = "111111111111111111111111111111111111+++++++++++++++++++++++++++++++++++[d11+<][][1-d1-][+]b";
+	/* x->ip = "11111111+++++++[d11+<][][1-d1-][+]b"; */ /* Fibonacci sequence */
+	/* x->ip = "11111++++[d0=][1+][d1-][*]l"; */ /* Factorial */ 
 	/* x->ip = "#8[:d1>?1-d1-;s;+]i"; */
 	/* x->ip = "1[11+][111++]?"; */
+	/* x->ip = "\"test string\""; */
+	x->ip = "#5[11+]t";
+	/* x->ip = "[11+]i111++"; */
+	/* x->ip = "#36.00"; */
+	/* x->ip = "#5[d0=][1+][d1-][*]l"; */
 	inner(x);
 
 	memset(buf, 0, sizeof buf);
-	dump_stack(buf, x, 0);
-	printf("%s\n", buf);
+	dump_stack(buf, x, 1);
+	printf("--- Data stack\n%s\n", buf);
 }
