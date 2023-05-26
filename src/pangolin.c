@@ -71,13 +71,14 @@ int main() {
 	/* x->ip = "#36[d11+<][][1-d1-][+]b"; */ /* Fibonacci sequence */
 	/* x->ip = "11111++++[d0=][1+][d1-][*]l"; */ /* Factorial */ 
 	/* x->ip = "1[11+][111++]?"; */ /* ifthen */
-	x->ip = "\"test string\"";
+	/* x->ip = "\"test string\""; */
 	/* x->ip = "#5[11+]t"; */
 	/* x->ip = "#5[d1>][1-]w"; */
 	/* x->ip = "[11+]i111++"; */
 	/* x->ip = "#36.00"; */
 	/* x->ip = "#5[d0=][1+][d1-][*]l"; */
 	/* x->ip = "[111++]i"; */
+	x->ip = "#5[d0=][1+][1---][*]l";
 	P_inner(x);
 
 	memset(buf, 0, sizeof buf);

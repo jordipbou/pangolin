@@ -25,16 +25,38 @@ enum {
 
 typedef struct { I t, c; union { I i; F f; } v; } O;
 
-typedef struct { O s[64]; I sp; B* r[64]; I rp; B* ip; B* tib; I tr; } X;
+#define STACK_SIZE							64
+#define RSTACK_SIZE							64
+
+typedef struct { O s[STACK_SIZE]; I sp; B* r[RSTACK_SIZE]; I rp; B* ip; B* tib; I in; I tr; I err; } X;
 
 typedef void (*FUNC)(X*);
 void P_inner(X*);
 
+#define ERR_STACK_OVERFLOW			-1
+#define ERR_STACK_UNDERFLOW			-2
+#define ERR_DIVIDE_BY_ZERO			-3
+
+I error(X* x) {
+	/* TODO: Find in exception stack a handler for current error */
+	printf("ERROR: %ld\n", x->err);
+	return 1;
+}
+
+#define OF1(x)			if (x->sp == STACK_SIZE) { x->err = ERR_STACK_OVERFLOW; if (error(x)) return; }
+#define OF2(x)			if (x->sp >= STACK_SIZE - 1) { x->err = ERR_STACK_OVERFLOW; if (error(x)) return; }
+#define UF1(x)			if (x->sp == 0) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
+#define UF2(x)			if (x->sp <= 1) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
+#define UF3(x)			if (x->sp <= 2) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
+#define UF4(x)			if (x->sp <= 3) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
+#define DZ(x)				if (TS(x).v.i == 0) { x->err = ERR_DIVIDE_BY_ZERO; if (error(x)) return; }
+
+#define DO(x, f)		f(x); if (x->err) { return; }
+
 X* init() {
 	X* x = malloc(sizeof(X));
-	x->sp = x->rp = 0;
-	x->ip = 0;
-	x->tr = 1;
+	x->sp = x->rp = x->in = x->err = x->tr = 0;
+	x->ip = x->tib = 0;
 	return x;
 }
 
@@ -128,24 +150,24 @@ void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)pop(x); CALL(x, q - 1, 0); }
 void P_ifthen(X* x, I c, B* t, B* e) { /* ( flag [P] [Q] -- P|Q ) */ CALL(x, (c ? t : e) - 1, 0); }
 void P_times(X* x, I t, B* q) { /* ( n [P] -- %n times P% ) */ 
 	for(;t > 0; t--) { 
-		CALL(x, q, 1); P_inner(x); 
+		CALL(x, q, 1); DO(x, P_inner);
 	} 
 }
 void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
 	do { 
-		CALL(x, c, 1); P_inner(x); 
+		CALL(x, c, 1); DO(x, P_inner);
 		if (!pop(x)) { return; } 
-		CALL(x, q, 1); P_inner(x); 
+		CALL(x, q, 1); DO(x, P_inner);
 	} while(1); 
 }
 /* Recursion operations */
 void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
-	CALL(x, i, 1); P_inner(x);
-	if (pop(x)) { CALL(x, t, 1); P_inner(x); }
+	CALL(x, i, 1); DO(x, P_inner);
+	if (pop(x)) { CALL(x, t, 1); DO(x, P_inner); }
 	else {
-		CALL(x, r1, 1); P_inner(x);
+		CALL(x, r1, 1); DO(x, P_inner);
 		P_linrec(x, i, t, r1, r2);
-		CALL(x, r2, 1); P_inner(x);
+		CALL(x, r2, 1); DO(x, P_inner);
 	}
 }
 
@@ -195,39 +217,38 @@ I P_forward(X* x, I o, I c) {
 void P_inner(X* x) {
 	B buf[255];
 	I r = x->rp;
-	do {
+	while (*x->ip != 0 && x->err == 0) {
 		if (x->tr) {
 			memset(buf, 0, sizeof buf);
 			dump(buf, x);
 			printf("%s\n", buf);
 		}
 		switch (*x->ip) {
-			case 0: return;
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
-			case '+': P_add(x); break;
-			case '-': P_sub(x); break;
-			case '*': P_mul(x); break;
-			case '/': P_div(x); break;
-			case '%': P_mod(x); break;
-			case '<': P_lt(x); break;
-			case '=': P_eq(x); break;
-			case '>': P_gt(x); break;
-			case 'd': P_dup(x); break;
-			case 's': P_swap(x); break;
-			case 'i': P_exec_i(x); break;
-			case '[': PUSH(x, x->ip + 1); P_forward(x, '[', ']'); break;
+			case '+': UF2(x); P_add(x); break;
+			case '-': UF2(x); P_sub(x); break;
+			case '*': UF2(x); P_mul(x); break;
+			case '/': UF2(x); DZ(x); P_div(x); break;
+			case '%': UF2(x); P_mod(x); break;
+			case '<': UF2(x); P_lt(x); break;
+			case '=': UF2(x); P_eq(x); break;
+			case '>': UF2(x); P_gt(x); break;
+			case 'd': UF1(x); OF1(x); P_dup(x); break;
+			case 's': UF2(x); P_swap(x); break;
+			case 'i': UF1(x); P_exec_i(x); break;
+			case '[': OF1(x); PUSH(x, x->ip + 1); P_forward(x, '[', ']'); break;
 			case ']': if (x->rp > r) { x->ip = POPR(x); } else { if (x->rp > 0) { x->ip = POPR(x); } return; } break;
-			case '?': P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 'l': P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 'b': P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 't': P_times(x, pop(x), (B*)pop(x)); break;
-			case 'w': P_while(x, (B*)pop(x), (B*)pop(x)); break;
+			case '?': UF2(x); P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 'l': UF3(x); P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 'b': UF3(x); P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 't': UF2(x); P_times(x, pop(x), (B*)pop(x)); break;
+			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
 			case '#': P_number(x); break;
-			case '"': PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = P_forward(x, 0, '"'); break;
+			case '"': OF1(x); PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = P_forward(x, 0, '"'); break;
 		}
 		x->ip++;
-	} while(1);
+	} 
 }
 
 #endif
