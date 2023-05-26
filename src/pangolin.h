@@ -49,12 +49,18 @@ typedef struct _X {
 } X;
 
 #define ADD_EXT(_x, _l, _f)			(_x->ext[_l - 'A'] = _f)
+#define KEY(_x)									(_x->ext['K' - 'A'])
+#define EMIT(_x)								(_x->ext['E' - 'A'])
+
+/* TODO: Implement print/scanf with key/emit */
 
 void P_inner(X*);
 
+#define ERR_OK									0
 #define ERR_STACK_OVERFLOW			-1
 #define ERR_STACK_UNDERFLOW			-2
 #define ERR_DIVIDE_BY_ZERO			-3
+#define ERR_EXIT								-4
 
 I error(X* x) {
 	/* TODO: Find in exception stack a handler for current error */
@@ -160,6 +166,9 @@ void P_eq(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--
 void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--; }
 
 /* Stack operations */
+/* TODO: Do I need to clone arrays here or just duplicate its address? */
+/* Only managed items can not be duplicated because if one its dropped the address will be
+   freed */
 void P_dup(X* x) { /* ( a -- a a ) */ 
 	if (TS(x).t % ARRAY == 0) {
 		I sz;
@@ -172,13 +181,15 @@ void P_dup(X* x) { /* ( a -- a a ) */
 		TS(x).t = NS(x).t % MANAGED == 0 ? NS(x).t : NS(x).t * MANAGED;
 		TS(x).c = NS(x).c;
 		strncpy((B*)TS(x).v.i, (B*)NS(x).v.i, NS(x).c * sz);
-	} else if (TS(x).t % FLOAT == 0) {
-		F f = TS(x).v.f; PUSHF(x, f); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
 	} else {
 		I i = TS(x).v.i; PUSH(x, i); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
 	}
 }
-void P_swap(X* x) { /* ( a b -- b a ) */ I i = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = i; }
+void P_swap(X* x) { /* ( a b -- b a ) */ 
+	I t = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = t; 
+	t = TS(x).t; TS(x).t = NS(x).t; NS(x).t = t;
+	t = TS(x).c; TS(x).c = NS(x).c; NS(x).c = t;
+}
 
 /* Execution */
 void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)pop(x); CALL(x, q - 1, 0); }
@@ -256,13 +267,15 @@ void P_inner(X* x) {
 	B buf[255];
 	B op;
 	I r = x->rp;
-	while (*x->ip != 0 && x->err == 0) {
+	while (*x->ip != 0 && x->err == ERR_OK) {
 		if (x->tr) {
 			memset(buf, 0, sizeof buf);
 			dump(buf, x);
-			printf("%s\n", buf);
+			printf("%s", buf);
 		}
 		switch (*x->ip) {
+			case '$': UF1(x); x->tr = pop(x); break;
+			case 'q': x->err = ERR_EXIT; return; break;
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
 			case '+': UF2(x); P_add(x); break;
@@ -300,6 +313,27 @@ void P_inner(X* x) {
 		}
 		x->ip++;
 	} 
+}
+
+void P_repl(X* x) {
+	B buf[255];
+
+	do {
+		printf("IN: ");
+		fgets(buf, 255, stdin);
+		x->ip = buf;
+		P_inner(x);
+		if (!x->tr) {
+			memset(buf, 0, sizeof buf);
+			dump_stack(buf, x, 1);
+			printf("\n--- Data stack\n%s", buf);
+		}
+		if (x->err == ERR_EXIT) { return; }
+		if (x->err != ERR_OK) {
+			printf("ERROR: %ld\n", x->err);
+			x->err = ERR_OK;
+		}
+	} while (1);
 }
 
 #endif
