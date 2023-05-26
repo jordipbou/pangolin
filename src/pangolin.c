@@ -84,7 +84,8 @@ int main() {
 	/* x->ip = "#5[d0=][1+][d1-][*]l"; */
 	/* x->ip = "[111++]i"; */
 	/* x->ip = "#5[d0=][1+][1---][*]l"; */
-	x->ip = "#3.1415d#7d\"test string\"d\\\\\\\\\\\\";
+	x->ip = "#3.1415d#7d\"test string\"d";
+	/* x->ip = "'h'e'l'l'o"; */
 	P_inner(x);
 
 	memset(buf, 0, sizeof buf);

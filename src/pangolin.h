@@ -19,8 +19,12 @@ enum {
 	/* Representation types */
 	CHAR = 11,
 	NUMBER = 13,
-	STRING = 17,
-	ARRAY = 19
+	ARRAY = 17,
+	STRING = 19,
+	I8 = 23,
+	I16 = 29,
+	I32 = 31,
+	I64 = 37
 } T;
 
 typedef struct { I t, c; union { I i; F f; } v; } O;
@@ -157,12 +161,17 @@ void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--;
 
 /* Stack operations */
 void P_dup(X* x) { /* ( a -- a a ) */ 
-	if (TS(x).t % STRING == 0) {
-		B* a = malloc(TS(x).c);
+	if (TS(x).t % ARRAY == 0) {
+		I sz;
+		if (TS(x).t % CHAR == 0 || TS(x).t % I8 == 0) sz = 1;
+		else if (TS(x).t % I16 == 0) sz = 2;
+		else if (TS(x).t % I32 == 0) sz = 4;
+		else if (TS(x).t % I64 == 0) sz = 8;
+		void* a = malloc(TS(x).c * sz);
 		PUSH(x, a);
-		TS(x).t = NS(x).t % MANAGED == 0 ? NS(x).t : NS(x).t*MANAGED;
+		TS(x).t = NS(x).t % MANAGED == 0 ? NS(x).t : NS(x).t * MANAGED;
 		TS(x).c = NS(x).c;
-		strncpy((B*)TS(x).v.i, (B*)NS(x).v.i, NS(x).c);
+		strncpy((B*)TS(x).v.i, (B*)NS(x).v.i, NS(x).c * sz);
 	} else if (TS(x).t % FLOAT == 0) {
 		F f = TS(x).v.f; PUSHF(x, f); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
 	} else {
@@ -188,6 +197,7 @@ void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
 		CALL(x, q, 1); DO(x, P_inner);
 	} while(1); 
 }
+
 /* Recursion operations */
 void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
 	CALL(x, i, 1); DO(x, P_inner);
@@ -275,7 +285,13 @@ void P_inner(X* x) {
 			case 't': UF2(x); P_times(x, pop(x), (B*)pop(x)); break;
 			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
 			case '#': P_number(x); break;
-			case '"': OF1(x); PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = P_forward(x, 0, '"'); break;
+			case '\'': OF1(x); PUSH(x, *++x->ip); TS(x).t *= CHAR; break;
+			case '"': 
+				OF1(x); 
+				PUSH(x, x->ip + 1); 
+				TS(x).t *= I8*ARRAY*STRING; 
+				TS(x).c = P_forward(x, 0, '"'); 
+				break;
 			default:
 				op = *x->ip;
 				if (op >= 'A' && op <= 'Z') {
