@@ -25,14 +25,16 @@ enum {
 
 typedef struct { I t, c; union { I i; F f; } v; } O;
 
-typedef struct { O s[64]; I sp; B* r[64]; I rp; B* ip; B* tib; } X;
+typedef struct { O s[64]; I sp; B* r[64]; I rp; B* ip; B* tib; I tr; } X;
 
 typedef void (*FUNC)(X*);
+void P_inner(X*);
 
 X* init() {
 	X* x = malloc(sizeof(X));
 	x->sp = x->rp = 0;
 	x->ip = 0;
+	x->tr = 1;
 	return x;
 }
 
@@ -102,87 +104,65 @@ I dump(B* s, X* x) {
 	return t;
 }
 
-void add(X* x) { 
-	if (NS(x).t % INT == 0 && TS(x).t % INT == 0) {
-		NS(x).v.i += TS(x).v.i; x->sp--;
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % INT == 0) {
-	} else if (NS(x).t % INT == 0 && TS(x).t % FLOAT == 0) {
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % FLOAT == 0) {
-	}
+/* Arithmetic operations */
+void P_add(X* x) { /* ( n n -- n ) */ NS(x).v.i += TS(x).v.i; x->sp--; }
+void P_sub(X* x) { /* ( n n -- n ) */ NS(x).v.i -= TS(x).v.i; x->sp--; }
+void P_mul(X* x) { /* ( n n -- n ) */ NS(x).v.i *= TS(x).v.i; x->sp--; }
+void P_div(X* x) { /* ( n n -- n ) */ NS(x).v.i /= TS(x).v.i; x->sp--; }
+void P_mod(X* x) { /* ( n n -- n ) */ NS(x).v.i %= TS(x).v.i; x->sp--; }
+
+/* Comparison operations */
+void P_lt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i < TS(x).v.i; x->sp--; }
+void P_eq(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--; }
+void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--; }
+
+/* Stack operations */
+/* TODO: Must ensure that stack operations work for every type */
+void P_dup(X* x) { /* ( a -- a a ) */ I i = TS(x).v.i; PUSH(x, i); }
+void P_swap(X* x) { /* ( a b -- b a ) */ I i = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = i; }
+
+/* Execution */
+void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)pop(x); CALL(x, q - 1, 0); }
+
+/* Conditional and looping operations */
+void P_ifthen(X* x, I c, B* t, B* e) { /* ( flag [P] [Q] -- P|Q ) */ CALL(x, (c ? t : e) - 1, 0); }
+void P_times(X* x, I t, B* q) { /* ( n [P] -- %n times P% ) */ 
+	for(;t > 0; t--) { 
+		CALL(x, q, 1); P_inner(x); 
+	} 
 }
-
-void sub(X* x) { 
-	if (NS(x).t % INT == 0 && TS(x).t % INT == 0) {
-		NS(x).v.i -= TS(x).v.i; x->sp--;
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % INT == 0) {
-	} else if (NS(x).t % INT == 0 && TS(x).t % FLOAT == 0) {
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % FLOAT == 0) {
-	}
+void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
+	do { 
+		CALL(x, c, 1); P_inner(x); 
+		if (!pop(x)) { return; } 
+		CALL(x, q, 1); P_inner(x); 
+	} while(1); 
 }
-
-void mul(X* x) { 
-	if (NS(x).t % INT == 0 && TS(x).t % INT == 0) {
-		NS(x).v.i *= TS(x).v.i; x->sp--;
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % INT == 0) {
-	} else if (NS(x).t % INT == 0 && TS(x).t % FLOAT == 0) {
-	} else if (NS(x).t % FLOAT == 0 && TS(x).t % FLOAT == 0) {
-	}
-}
-
-void lt(X* x) { NS(x).v.i = NS(x).v.i < TS(x).v.i; x->sp--; }
-void eq(X* x) { NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--; }
-
-void dup(X* x) { I i = TS(x).v.i; PUSH(x, i); }
-void swap(X* x) { I i = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = i; }
-void gt(X* x) { NS(x).v.i = NS(x).v.i > TS(x).v.i; }
-void exec_i(X* x) { B* q = (B*)pop(x); CALL(x, q, 0); }
-
-I forward(X* x, I o, I c) {
-	I t = 1, n = 0;
-	while (t != 0 && *x->ip != 0) {
-		x->ip++;
-		n++;
-		if (*(x->ip) == o) { t++; }
-		if (*(x->ip) == c) { t--; }
-	}
-
-	return n - 1;
-}
-
-void ifthen(X* x) {
-	B* e = (B*)pop(x);
-	B* t = (B*)pop(x);
-	if (pop(x)) { CALL(x, t, 0); }
-	else { CALL(x, e, 0); }
-}
-
-void inner(X*);
-
-void linrec(X* x, B* i, B* t, B* r1, B* r2) {
-	CALL(x, i, 1); inner(x);
-	if (pop(x)) { CALL(x, t, 1); inner(x); }
+/* Recursion operations */
+void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
+	CALL(x, i, 1); P_inner(x);
+	if (pop(x)) { CALL(x, t, 1); P_inner(x); }
 	else {
-		CALL(x, r1, 1); inner(x);
-		linrec(x, i, t, r1, r2);
-		CALL(x, r2, 1); inner(x);
+		CALL(x, r1, 1); P_inner(x);
+		P_linrec(x, i, t, r1, r2);
+		CALL(x, r2, 1); P_inner(x);
 	}
 }
 
-void binrec(X* x, B* i, B* t, B* r1, B* r2) {
-	CALL(x, i, 1); inner(x);
-	if (pop(x)) { CALL(x, t, 1); inner(x); } 
+void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
+	CALL(x, i, 1); P_inner(x);
+	if (pop(x)) { CALL(x, t, 1); P_inner(x); } 
 	else {
-		CALL(x, r1, 1); inner(x);
-		binrec(x, i, t, r1, r2);
-		swap(x);
-		binrec(x, i, t, r1, r2);
-		CALL(x, r2, 1); inner(x);
+		CALL(x, r1, 1); P_inner(x);
+		P_binrec(x, i, t, r1, r2);
+		P_swap(x);
+		P_binrec(x, i, t, r1, r2);
+		CALL(x, r2, 1); P_inner(x);
 	}
 }
 
-void times(X* x, I t, B* q) { for(;t > 0; t--) { CALL(x, q, 1); inner(x); } }
-
-void number(X* x) {
+/* Parsing */
+void P_number(X* x) {
 	char *end, *end2;
 	F f;
 	I i;
@@ -200,33 +180,51 @@ void number(X* x) {
 	x->ip = end - 1;
 }
 
-void inner(X* x) {
+I P_forward(X* x, I o, I c) {
+	I t = 1, n = 0;
+	while (t != 0 && *x->ip != 0) {
+		x->ip++;
+		n++;
+		if (*(x->ip) == o) { t++; }
+		if (*(x->ip) == c) { t--; }
+	}
+
+	return n - 1;
+}
+
+void P_inner(X* x) {
 	B buf[255];
 	I r = x->rp;
 	do {
-		memset(buf, 0, sizeof buf);
-		dump(buf, x);
-		printf("%s\n", buf);
+		if (x->tr) {
+			memset(buf, 0, sizeof buf);
+			dump(buf, x);
+			printf("%s\n", buf);
+		}
 		switch (*x->ip) {
 			case 0: return;
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
-			case '+': add(x); break;
-			case '-': sub(x); break;
-			case '*': mul(x); break;
-			case '<': lt(x); break;
-			case '=': eq(x); break;
-			case 'd': dup(x); break;
-			case 's': swap(x); break;
-			case 'i': exec_i(x); break;
-			case '[': PUSH(x, x->ip + 1); forward(x, '[', ']'); break;
+			case '+': P_add(x); break;
+			case '-': P_sub(x); break;
+			case '*': P_mul(x); break;
+			case '/': P_div(x); break;
+			case '%': P_mod(x); break;
+			case '<': P_lt(x); break;
+			case '=': P_eq(x); break;
+			case '>': P_gt(x); break;
+			case 'd': P_dup(x); break;
+			case 's': P_swap(x); break;
+			case 'i': P_exec_i(x); break;
+			case '[': PUSH(x, x->ip + 1); P_forward(x, '[', ']'); break;
 			case ']': if (x->rp > r) { x->ip = POPR(x); } else { if (x->rp > 0) { x->ip = POPR(x); } return; } break;
-			case '?': ifthen(x); break;
-			case 'l': linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 'b': binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 't': times(x, pop(x), (B*)pop(x)); break;
-			case '#': number(x); break;
-			case '"': PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = forward(x, 0, '"'); break;
+			case '?': P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 'l': P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 'b': P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
+			case 't': P_times(x, pop(x), (B*)pop(x)); break;
+			case 'w': P_while(x, (B*)pop(x), (B*)pop(x)); break;
+			case '#': P_number(x); break;
+			case '"': PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = P_forward(x, 0, '"'); break;
 		}
 		x->ip++;
 	} while(1);

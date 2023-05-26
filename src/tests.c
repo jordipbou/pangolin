@@ -73,21 +73,21 @@ void test_DUMP_RSTACK() {
 
 void test_INNER_0() {
 	x->ip = "00";
-	inner(x);
+	P_inner(x);
 	dump_stack(buf, x, 0);
 	TEST_ASSERT_EQUAL_STRING("0 0 ", buf);
 }
 
 void test_INNER_1() {
 	x->ip = "11";
-	inner(x);
+	P_inner(x);
 	dump_stack(buf, x, 0);
 	TEST_ASSERT_EQUAL_STRING("1 1 ", buf);
 }
 
 void test_INNER_add() {
 	x->ip = "111++";
-	inner(x);
+	P_inner(x);
 	dump_stack(buf, x, 0);
 	TEST_ASSERT_EQUAL_STRING("3 ", buf);
 }
