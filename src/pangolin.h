@@ -28,9 +28,24 @@ typedef struct { I t, c; union { I i; F f; } v; } O;
 #define STACK_SIZE							64
 #define RSTACK_SIZE							64
 
-typedef struct { O s[STACK_SIZE]; I sp; B* r[RSTACK_SIZE]; I rp; B* ip; B* tib; I in; I tr; I err; } X;
+struct _X;
+typedef void (*FUNC)(struct _X*);
 
-typedef void (*FUNC)(X*);
+typedef struct _X { 
+	O s[STACK_SIZE]; 
+	I sp; 
+	B* r[RSTACK_SIZE]; 
+	I rp; 
+	FUNC ext[26];
+	B* ip; 
+	B* tib; 
+	I in; 
+	I tr; 
+	I err; 
+} X;
+
+#define ADD_EXT(_x, _l, _f)			(_x->ext[_l - 'A'] = _f)
+
 void P_inner(X*);
 
 #define ERR_STACK_OVERFLOW			-1
@@ -90,6 +105,8 @@ I dump_o(B* s, O* o) {
 I dump_stack(B* s, X* x, I nl) {
 	I i, t, n = 0;
 	for (i = 0; i < x->sp; i++) { 
+		if (nl) { s += t = sprintf(s, "[%c] ", PK(x, i).t % MANAGED == 0 ? 'M' : ' '); n += t; }
+		if (nl) { s += t = sprintf(s, "%08X ", PK(x, i).v.i); n += t; }
 		s += t = dump_o(s, &PK(x, i)); 
 		*s++ = nl ? '\n' : ' '; 
 		n += t + 1; 
@@ -139,8 +156,19 @@ void P_eq(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--
 void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--; }
 
 /* Stack operations */
-/* TODO: Must ensure that stack operations work for every type */
-void P_dup(X* x) { /* ( a -- a a ) */ I i = TS(x).v.i; PUSH(x, i); }
+void P_dup(X* x) { /* ( a -- a a ) */ 
+	if (TS(x).t % STRING == 0) {
+		B* a = malloc(TS(x).c);
+		PUSH(x, a);
+		TS(x).t = NS(x).t % MANAGED == 0 ? NS(x).t : NS(x).t*MANAGED;
+		TS(x).c = NS(x).c;
+		strncpy((B*)TS(x).v.i, (B*)NS(x).v.i, NS(x).c);
+	} else if (TS(x).t % FLOAT == 0) {
+		F f = TS(x).v.f; PUSHF(x, f); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
+	} else {
+		I i = TS(x).v.i; PUSH(x, i); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
+	}
+}
 void P_swap(X* x) { /* ( a b -- b a ) */ I i = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = i; }
 
 /* Execution */
@@ -216,6 +244,7 @@ I P_forward(X* x, I o, I c) {
 
 void P_inner(X* x) {
 	B buf[255];
+	B op;
 	I r = x->rp;
 	while (*x->ip != 0 && x->err == 0) {
 		if (x->tr) {
@@ -236,6 +265,7 @@ void P_inner(X* x) {
 			case '>': UF2(x); P_gt(x); break;
 			case 'd': UF1(x); OF1(x); P_dup(x); break;
 			case 's': UF2(x); P_swap(x); break;
+			case '\\': UF1(x); DROP(x); break;
 			case 'i': UF1(x); P_exec_i(x); break;
 			case '[': OF1(x); PUSH(x, x->ip + 1); P_forward(x, '[', ']'); break;
 			case ']': if (x->rp > r) { x->ip = POPR(x); } else { if (x->rp > 0) { x->ip = POPR(x); } return; } break;
@@ -246,6 +276,11 @@ void P_inner(X* x) {
 			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
 			case '#': P_number(x); break;
 			case '"': OF1(x); PUSH(x, x->ip + 1); TS(x).t *= STRING; TS(x).c = P_forward(x, 0, '"'); break;
+			default:
+				op = *x->ip;
+				if (op >= 'A' && op <= 'Z') {
+					DO(x, x->ext[op - 'A']);
+				}
 		}
 		x->ip++;
 	} 
