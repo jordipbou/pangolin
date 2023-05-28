@@ -24,7 +24,8 @@ enum {
 	I8 = 23,
 	I16 = 29,
 	I32 = 31,
-	I64 = 37
+	I64 = 37,
+	QUOTATION = 41
 } T;
 
 typedef struct { I t, c; union { I i; F f; } v; } O;
@@ -48,9 +49,9 @@ typedef struct _X {
 	I err; 
 } X;
 
-#define ADD_EXT(_x, _l, _f)			(_x->ext[_l - 'A'] = _f)
-#define KEY(_x)									(_x->ext['K' - 'A'])
-#define EMIT(_x)								(_x->ext['E' - 'A'])
+#define EX(_x, _l)		(_x->ext[_l - 'A'])
+#define KEY(_x)				(_x->ext['K' - 'A'])
+#define EMIT(_x)			(_x->ext['E' - 'A'])
 
 /* TODO: Implement print/scanf with key/emit */
 
@@ -106,7 +107,21 @@ I pop(X* x) { DROP(x); return PK(x, x->sp).v.i; }
 /* External representation */
 
 I dump_o(B* s, O* o) {
-	if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
+	/* if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
+	else  */
+	if (o->t % ARRAY == 0) {
+		if (o->t % I8 == 0) {
+			I i, c = 1;
+			for (i = 0; i < o->c; i++) {
+				c = c & (((B*)o->v.i)[i] >= 32 && ((B*)o->v.i)[i] <= 126);
+			}
+			if (c) {
+				return sprintf(s, "[%.*s]", (int)o->c, (B*)o->v.i); 
+			} else {
+				return sprintf(s, "ARRAY: %ld", o->v.i);
+			}
+		}
+	}
 	else if (o->t % CHAR == 0) { return sprintf(s, "%c", (char)o->v.i); }
 	else if (o->t % INT == 0) { return sprintf(s, "%ld", o->v.i); } 
 	else if (o->t % FLOAT == 0) { return sprintf(s, "%g", o->v.f); }
@@ -165,6 +180,8 @@ void P_lt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i < TS(x).v.i; x->sp--;
 void P_eq(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--; }
 void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--; }
 
+void P_not(X* x) { /* ( n -- n ) */ TS(x).v.i = !TS(x).v.i; }
+
 /* Stack operations */
 /* TODO: Do I need to clone arrays here or just duplicate its address? */
 /* Only managed items can not be duplicated because if one its dropped the address will be
@@ -192,6 +209,9 @@ void P_swap(X* x) { /* ( a b -- b a ) */
 }
 
 /* Execution */
+/* TODO: This will not work with managed blocks because the block will be popped out before
+   its executed!!!! */
+/* This should be changed to O o = init from TS; CALL(...1); inner(x); free(o) if needed. */
 void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)pop(x); CALL(x, q - 1, 0); }
 
 /* Conditional and looping operations */
@@ -278,6 +298,7 @@ void P_inner(X* x) {
 			case 'q': x->err = ERR_EXIT; return; break;
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
+			case '#': P_number(x); break;
 			case '+': UF2(x); P_add(x); break;
 			case '-': UF2(x); P_sub(x); break;
 			case '*': UF2(x); P_mul(x); break;
@@ -286,18 +307,23 @@ void P_inner(X* x) {
 			case '<': UF2(x); P_lt(x); break;
 			case '=': UF2(x); P_eq(x); break;
 			case '>': UF2(x); P_gt(x); break;
+			case '!': UF1(x); P_not(x); break;
 			case 'd': UF1(x); OF1(x); P_dup(x); break;
 			case 's': UF2(x); P_swap(x); break;
 			case '\\': UF1(x); DROP(x); break;
 			case 'i': UF1(x); P_exec_i(x); break;
-			case '[': OF1(x); PUSH(x, x->ip + 1); P_forward(x, '[', ']'); break;
+			case '[': 
+				OF1(x); 
+				PUSH(x, x->ip + 1); 
+				TS(x).t *= I8*ARRAY;
+				TS(x).c = P_forward(x, '[', ']'); 
+				break;
 			case ']': if (x->rp > r) { x->ip = POPR(x); } else { if (x->rp > 0) { x->ip = POPR(x); } return; } break;
 			case '?': UF2(x); P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 'l': UF3(x); P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 'b': UF3(x); P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 't': UF2(x); P_times(x, pop(x), (B*)pop(x)); break;
 			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
-			case '#': P_number(x); break;
 			case '\'': OF1(x); PUSH(x, *++x->ip); TS(x).t *= CHAR; break;
 			case '"': 
 				OF1(x); 

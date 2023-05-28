@@ -2,96 +2,50 @@
 #include<string.h>
 #include"pangolin.h"
 
-/*
-C repl(X* x) {
-	char buf[255];
-	C i;
-	char k;
-
-	do {
-		printf("IN: ");
-		for (i = 0; i < 255; i++) { buf[i] = 0; }
-		fgets(buf, 255, stdin);
-		x->ip = buf;
-		i = inner(x);
-		if (!x->trace && x->sp != 0) { 
-			buf[0] = 0; 
-			sprintf(buf, "%s", dump_stack_stack(buf, x, 1));
-			printf("%s", buf);
-		}
-		if (i == ERR_EXIT) { return ERR_EXIT; }
-		if (i != ERR_OK) { 
-			buf[0] = 0; 
-			printf("ERROR: %ld\n", i);
-		}
-	} while(1);
-}
-
-int main() {
-	X* x = init();
-
-	repl(x);
-}
-*/
+#ifdef _WIN32
+  #include <conio.h>
+#else
+	#include <unistd.h>
+	#include <termios.h>
+#endif
 
 /*
-void fib(X* x) {
-	B buf[255];
-	DUP(x);
-	PUSHI(x, NUMBER, 1);
-	GT(x);
-	if (POPI(x)) {
-		PUSHI(x, NUMBER, 1);
-		SUB(x);
-		DUP(x);
-		PUSHI(x, NUMBER, 1);
-		SUB(x);
-		fib(x);
-		SWAP(x);
-		fib(x);
-		ADD(x);
-	}
-}
-
-int main() {
-	X* x = init();
-
-	PUSHI(x, NUMBER, 36);
-	fib(x);
-
-	printf("OUT: %ld\n", TS(x).v.i);
-}
+ Source code for getch is taken from:
+ Crossline readline (https://github.com/jcwangxp/Crossline).
+ It's a fantastic readline cross-platform replacement, but only getch was
+ needed and there's no need to include everything else.
 */
-
-void hello(X* x) {
-	printf("Hello!\n");
+#ifdef _WIN32
+int _getch (void) {	fflush (stdout); return _getch(); }
+#else
+int _getch ()
+{
+	char ch = 0;
+	struct termios old_term, cur_term;
+	fflush (stdout);
+	if (tcgetattr(STDIN_FILENO, &old_term) < 0)	{ perror("tcsetattr"); }
+	cur_term = old_term;
+	cur_term.c_lflag &= ~(ICANON | ECHO | ISIG); /* echoing off, canonical off, no signal chars */
+	cur_term.c_cc[VMIN] = 1;
+	cur_term.c_cc[VTIME] = 0;
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &cur_term) < 0)	{ perror("tcsetattr"); }
+	if (read(STDIN_FILENO, &ch, 1) < 0)	{ /* perror("read()"); */ } /* signal will interrupt */
+	if (tcsetattr(STDIN_FILENO, TCSADRAIN, &old_term) < 0)	{ perror("tcsetattr"); }
+	return ch;
 }
+#endif
+
+void key(X* x) { PUSH(x, _getch()); }
+void emit(X* x) { printf("%c", (char)pop(x)); }
 
 int main() {
 	B buf[255];
 	X* x = init();
+
+	KEY(x) = &key;
+	EMIT(x) = &emit;
+
 	x->tr = 1;
-	/* ADD_EXT(x, 'H', &hello); */
 
-	/* x->ip = "#36[d11+<][][1-d1-][+]b"; */ /* Fibonacci sequence */
-	/* x->ip = "11111++++[d0=][1+][d1-][*]l"; */ /* Factorial */ 
-	/* x->ip = "1[11+][111++]?"; */ /* ifthen */
-	/* x->ip = "\"test string\""; */
-	/* x->ip = "#5[11+]t"; */
-	/* x->ip = "#5[d1>][1-]w"; */
-	/* x->ip = "[11+]i111++"; */
-	/* x->ip = "#36.00"; */
-	/* x->ip = "#5[d0=][1+][d1-][*]l"; */
-	/* x->ip = "[111++]i"; */
-	/* x->ip = "#5[d0=][1+][1---][*]l"; */
-	/* x->ip = "#3.1415d#7d\"test string\"ds"; */
-	/* x->ip = "'h'e'l'l'o"; */
-	/* P_inner(x);*/
-
-	/*
-	memset(buf, 0, sizeof buf);
-	dump_stack(buf, x, 1);
-	printf("--- Data stack\n%s\n", buf);
-	*/
 	P_repl(x);
 }
