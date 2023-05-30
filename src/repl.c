@@ -42,8 +42,10 @@ int main() {
 	B buf[255];
 	X* x = init();
 
+	/*
 	KEY(x) = &key;
 	EMIT(x) = &emit;
+	*/
 
 	x->tr = 1;
 

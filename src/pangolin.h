@@ -91,8 +91,8 @@ X* init() {
 
 #define TR(_x)                (PK(_x, x->rp))
 
-#define PUSH(_x, _v)					OF(_x); SETI(PK(_x, _x->sp++), INT, 0, (I)_v)
-#define PUSHF(_x, _v)					OF(_x); SETF(PK(_x, _x->sp++), FLOAT, 0, (F)_v)
+#define PUSH(_x, _v)					OF1(_x); SETI(PK(_x, _x->sp++), INT, 0, (I)_v)
+#define PUSHF(_x, _v)					OF1(_x); SETF(PK(_x, _x->sp++), FLOAT, 0, (F)_v)
 
 O* dispose(X* x) {
   O* o = TS(x);
@@ -327,7 +327,7 @@ void P_inner(X* x) {
 			case '!': UF1(x); P_not(x); break;
 			case 'd': UF1(x); OF1(x); P_dup(x); break;
 			case 's': UF2(x); P_swap(x); break;
-			case '\\': UF1(x); DROP(x); break;
+			case '\\': UF1(x); pop(x); break;
 			case 'i': UF1(x); P_exec_i(x); break;
 			case '[': 
 				OF1(x); 
