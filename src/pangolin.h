@@ -46,6 +46,11 @@ typedef struct _X {
 	I err; 
 } X;
 
+#define ERROR(_x) (_x->err)
+
+#define DEPTH(_x) (_x->sp)
+#define MAX_DEPTH(_x) STACK_SIZE
+
 typedef void (*FUNC)(struct _X*);
 
 void P_inner(X*);
