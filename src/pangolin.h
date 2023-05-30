@@ -7,61 +7,55 @@
 
 typedef char B;
 typedef intptr_t I;
-typedef double F;		/* This should be float in 32 bit system */
+typedef double F;
 
 enum {
-	/* */
 	ANY = 1,
-	/* Stack types */
 	INT = 2,
 	FLOAT = 3,
 	MANAGED = 5,
-	/* Representation types */
-	CHAR = 11,
-	NUMBER = 13,
-	ARRAY = 17,
-	STRING = 19,
-	I8 = 23,
-	I16 = 29,
-	I32 = 31,
-	I64 = 37,
-	QUOTATION = 41
+	CHAR = 7,
+	ARRAY = 11,
+	I8 = 13,
+	I16 = 17,
+	I32 = 19,
+	I64 = 23,
+	STRING = 29,
+  RETURN = 31
 } T;
 
-typedef struct { I t, c; union { I i; F f; } v; } O;
+typedef struct { 
+  I t;
+  I c; 
+  union { 
+    I i; 
+    F f; 
+  } v; 
+} O;
 
-#define STACK_SIZE							64
-#define RSTACK_SIZE							64
+#define SETI(_o, _t, _c, _v)  (_o->t = _t, _o->c = _c, _o->v.i = _v, _o)
+#define SETF(_o, _t, _c, _v)  (_o->t = _t, _o->c = _c, _o->v.f = _v, _o)
 
-struct _X;
-typedef void (*FUNC)(struct _X*);
+#define STACK_SIZE				128
 
 typedef struct _X { 
 	O s[STACK_SIZE]; 
-	I sp; 
-	B* r[RSTACK_SIZE]; 
-	I rp; 
-	FUNC ext[26];
+	I sp, rp;
 	B* ip; 
-	B* tib; 
-	I in; 
 	I tr; 
 	I err; 
 } X;
 
-#define EX(_x, _l)		(_x->ext[_l - 'A'])
-#define KEY(_x)				(_x->ext['K' - 'A'])
-#define EMIT(_x)			(_x->ext['E' - 'A'])
-
-/* TODO: Implement print/scanf with key/emit */
+typedef void (*FUNC)(struct _X*);
 
 void P_inner(X*);
 
 #define ERR_OK									0
 #define ERR_STACK_OVERFLOW			-1
 #define ERR_STACK_UNDERFLOW			-2
-#define ERR_DIVIDE_BY_ZERO			-3
-#define ERR_EXIT								-4
+#define ERR_RSTACK_UNDERFLOW    -3
+#define ERR_DIVIDE_BY_ZERO			-4
+#define ERR_EXIT								-5
 
 I error(X* x) {
 	/* TODO: Find in exception stack a handler for current error */
@@ -69,59 +63,86 @@ I error(X* x) {
 	return 1;
 }
 
-#define OF1(x)			if (x->sp == STACK_SIZE) { x->err = ERR_STACK_OVERFLOW; if (error(x)) return; }
-#define OF2(x)			if (x->sp >= STACK_SIZE - 1) { x->err = ERR_STACK_OVERFLOW; if (error(x)) return; }
-#define UF1(x)			if (x->sp == 0) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
-#define UF2(x)			if (x->sp <= 1) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
-#define UF3(x)			if (x->sp <= 2) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
-#define UF4(x)			if (x->sp <= 3) { x->err = ERR_STACK_UNDERFLOW; if (error(x)) return; }
-#define DZ(x)				if (TS(x).v.i == 0) { x->err = ERR_DIVIDE_BY_ZERO; if (error(x)) return; }
+#define ERR(_x, _c, _e)   if (_c) { _x->err = _e; if (error(_x)) return; }
 
-#define DO(x, f)		f(x); if (x->err) { return; }
+#define OF1(_x)			      ERR(_x, _x->sp == _x->rp, ERR_STACK_OVERFLOW)
+#define OF2(_x)			      ERR(_x, _x->sp >= _x->rp - 1, ERR_STACK_OVERFLOW)
+#define UF1(_x)			      ERR(_x, _x->sp == 0, ERR_STACK_UNDERFLOW)
+#define UF2(_x)			      ERR(_x, _x->sp <= 1, ERR_STACK_UNDERFLOW)
+#define UF3(_x)			      ERR(_x, _x->sp <= 2, ERR_STACK_UNDERFLOW)
+#define UF4(_x)			      ERR(_x, _x->sp <= 3, ERR_STACK_UNDERFLOW)
+#define RUF1(_x)          ERR(_x, _x->rp < STACK_SIZE, ERR_RSTACK_UNDERFLOW)
+#define DZ(_x)				    ERR(_x, TS(_x)->v.i == 0, ERR_DIVIDE_BY_ZERO)
+
+#define DO(_x, _f)		    _f(_x); if (_x->err) { return; }
 
 X* init() {
 	X* x = malloc(sizeof(X));
-	x->sp = x->rp = x->in = x->err = x->tr = 0;
-	x->ip = x->tib = 0;
+	x->sp = x->err = x->tr = 0;
+  x->tr = STACK_SIZE;
+	x->ip = 0;
 	return x;
 }
 
-#define PK(_x, _i)						(_x->s[_i])
+#define PK(_x, _i)						(&_x->s[_i])
+
 #define TS(_x)								(PK(_x, x->sp - 1))
 #define NS(_x)								(PK(_x, x->sp - 2))
 
-#define PUSH(_x, _v)					(_x->sp++, TS(_x).t = INT, TS(_x).c = 0, TS(x).v.i = (I)_v)
-#define PUSHF(_x, _v)					(_x->sp++, TS(_x).t = FLOAT, TS(_x).c = 0, TS(x).v.f = (F)_v)
+#define TR(_x)                (PK(_x, x->rp))
 
-#define DROP(_x)							if (TS(_x).t % MANAGED == 0) { free((void*)TS(_x).v.i); }; x->sp--
+#define PUSH(_x, _v)					OF(_x); SETI(PK(_x, _x->sp++), INT, 0, (I)_v)
+#define PUSHF(_x, _v)					OF(_x); SETF(PK(_x, _x->sp++), FLOAT, 0, (F)_v)
 
-/* Beware, POP will free managed references before returning them! */
-I pop(X* x) { DROP(x); return PK(x, x->sp).v.i; }
-#define POPF(_x)							(DROP(_x), PK(_x, _x->sp).v.f)
+O* dispose(X* x) {
+  O* o = TS(x);
+  x->sp--;
+  x->rp--;
+  TR(x)->t = o->t;
+  TR(x)->c = o->c;
+  TR(x)->v.i = o->v.i;
+  return TR(x);
+}
 
-#define PUSHR(_x, _i)					(_x->r[_x->rp++] = _i)
-#define POPR(_x)							(_x->r[--_x->rp])
+I pop(X* x) { 
+  O* o;
+  I i;
+  UF1(x);
+  o = TS(x); 
+  i = o->v.i; 
+  if (o->t % MANAGED == 0) { 
+    free((void*)o->v.i); 
+  }
+  return i;
+}
+
+#define POPF(_x)							(UF1(_x), PK(_x, --_x->sp).v.f)
+
+#define PUSHR(_x, _i)					SETI(PK(_x, _x->rp--), RETURN, 0, (I)_i)
+
+B* popr(X* x) {
+  O* o;
+  while (x->rp < STACK_SIZE) {
+    o = PK(x, x->rp);
+    if (o->t % RETURN == 0) {
+      B* b = (B*)o->v.i;
+      x->rp++;
+      return b;
+    } else {
+      if (o->t % MANAGED == 0) {
+        free((void*)o->v.i);
+      }
+      x->rp++;
+    }
+  }
+}
 
 #define CALL(x, d, t)					if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { PUSHR(x, x->ip); } x->ip = d
 
 /* External representation */
 
 I dump_o(B* s, O* o) {
-	/* if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
-	else  */
-	if (o->t % ARRAY == 0) {
-		if (o->t % I8 == 0) {
-			I i, c = 1;
-			for (i = 0; i < o->c; i++) {
-				c = c & (((B*)o->v.i)[i] >= 32 && ((B*)o->v.i)[i] <= 126);
-			}
-			if (c) {
-				return sprintf(s, "[%.*s]", (int)o->c, (B*)o->v.i); 
-			} else {
-				return sprintf(s, "ARRAY: %ld", o->v.i);
-			}
-		}
-	}
+	if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
 	else if (o->t % CHAR == 0) { return sprintf(s, "%c", (char)o->v.i); }
 	else if (o->t % INT == 0) { return sprintf(s, "%ld", o->v.i); } 
 	else if (o->t % FLOAT == 0) { return sprintf(s, "%g", o->v.f); }
@@ -130,22 +151,22 @@ I dump_o(B* s, O* o) {
 I dump_stack(B* s, X* x, I nl) {
 	I i, t, n = 0;
 	for (i = 0; i < x->sp; i++) { 
-		if (nl) { s += t = sprintf(s, "[%c] ", PK(x, i).t % MANAGED == 0 ? 'M' : ' '); n += t; }
-		if (nl) { s += t = sprintf(s, "%08X ", PK(x, i).v.i); n += t; }
-		s += t = dump_o(s, &PK(x, i)); 
+		if (nl) { s += t = sprintf(s, "[%c] ", PK(x, i)->t % MANAGED == 0 ? 'M' : ' '); n += t; }
+		if (nl) { s += t = sprintf(s, "%08X ", (unsigned int)PK(x, i)->v.i); n += t; }
+		s += t = dump_o(s, PK(x, i)); 
 		*s++ = nl ? '\n' : ' '; 
 		n += t + 1; 
 	}
 	return n;
 }
 
-#define DUMP_CODE(o) for (i = 0; *(o + i) != 0 && t > 0; i++) { n++; *s++ = *(o + i); if (*(o + i) == '[') t++; else if (*(o + i) == ']') t--; }
+#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
 #define SEPARATOR	*s++ = ' '; *s++ = ':'; *s++ = ' '; n += 3;
 
 I dump_rstack(B* s, X* x) {
 	I i, j, t = 1, n = 0;
 	DUMP_CODE(x->ip);
-	for (j = x->rp - 1; j >= 0; j--) { SEPARATOR; t = 1; DUMP_CODE(x->r[j]); }
+	for (j = STACK_SIZE - 1; j >= x->rp; j--) { SEPARATOR; t = 1; DUMP_CODE((B*)PK(x, j)->v.i); }
 
 	return n;
 }
@@ -159,53 +180,49 @@ I dump(B* s, X* x) {
 	s += t = sprintf(s, "%40s: ", r);
 	s += n = dump_rstack(s, x);
 	t += n;
-	if (x->tib != 0 && *x->tib != 0) {
-		*s++ = ' '; *s++ = '<'; *s++ = '<'; *s++ = ' '; t += 4;
-		for (n = 0; *x->tib != 0; x->tib++, n++) { *s++ = *x->tib; }
-		t += n;
-	}
 
 	return t;
 }
 
 /* Arithmetic operations */
-void P_add(X* x) { /* ( n n -- n ) */ NS(x).v.i += TS(x).v.i; x->sp--; }
-void P_sub(X* x) { /* ( n n -- n ) */ NS(x).v.i -= TS(x).v.i; x->sp--; }
-void P_mul(X* x) { /* ( n n -- n ) */ NS(x).v.i *= TS(x).v.i; x->sp--; }
-void P_div(X* x) { /* ( n n -- n ) */ NS(x).v.i /= TS(x).v.i; x->sp--; }
-void P_mod(X* x) { /* ( n n -- n ) */ NS(x).v.i %= TS(x).v.i; x->sp--; }
+void P_add(X* x) { /* ( n n -- n ) */ NS(x)->v.i += TS(x)->v.i; x->sp--; }
+void P_sub(X* x) { /* ( n n -- n ) */ NS(x)->v.i -= TS(x)->v.i; x->sp--; }
+void P_mul(X* x) { /* ( n n -- n ) */ NS(x)->v.i *= TS(x)->v.i; x->sp--; }
+void P_div(X* x) { /* ( n n -- n ) */ NS(x)->v.i /= TS(x)->v.i; x->sp--; }
+void P_mod(X* x) { /* ( n n -- n ) */ NS(x)->v.i %= TS(x)->v.i; x->sp--; }
 
 /* Comparison operations */
-void P_lt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i < TS(x).v.i; x->sp--; }
-void P_eq(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i == TS(x).v.i; x->sp--; }
-void P_gt(X* x) { /* ( n n -- n ) */ NS(x).v.i = NS(x).v.i > TS(x).v.i; x->sp--; }
+void P_lt(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i < TS(x)->v.i; x->sp--; }
+void P_eq(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i == TS(x)->v.i; x->sp--; }
+void P_gt(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i > TS(x)->v.i; x->sp--; }
 
-void P_not(X* x) { /* ( n -- n ) */ TS(x).v.i = !TS(x).v.i; }
+void P_not(X* x) { /* ( n -- n ) */ TS(x)->v.i = !TS(x)->v.i; }
 
 /* Stack operations */
 /* TODO: Do I need to clone arrays here or just duplicate its address? */
 /* Only managed items can not be duplicated because if one its dropped the address will be
    freed */
 void P_dup(X* x) { /* ( a -- a a ) */ 
-	if (TS(x).t % ARRAY == 0) {
+	if (TS(x)->t % ARRAY == 0) {
 		I sz;
-		if (TS(x).t % CHAR == 0 || TS(x).t % I8 == 0) sz = 1;
-		else if (TS(x).t % I16 == 0) sz = 2;
-		else if (TS(x).t % I32 == 0) sz = 4;
-		else if (TS(x).t % I64 == 0) sz = 8;
-		void* a = malloc(TS(x).c * sz);
+    void* a;
+		if (TS(x)->t % CHAR == 0 || TS(x)->t % I8 == 0) sz = 1;
+		else if (TS(x)->t % I16 == 0) sz = 2;
+		else if (TS(x)->t % I32 == 0) sz = 4;
+		else if (TS(x)->t % I64 == 0) sz = 8;
+		a = malloc(TS(x)->c * sz);
 		PUSH(x, a);
-		TS(x).t = NS(x).t % MANAGED == 0 ? NS(x).t : NS(x).t * MANAGED;
-		TS(x).c = NS(x).c;
-		strncpy((B*)TS(x).v.i, (B*)NS(x).v.i, NS(x).c * sz);
+		TS(x)->t = NS(x)->t % MANAGED == 0 ? NS(x)->t : NS(x)->t * MANAGED;
+		TS(x)->c = NS(x)->c;
+		strncpy((B*)TS(x)->v.i, (B*)NS(x)->v.i, NS(x)->c * sz);
 	} else {
-		I i = TS(x).v.i; PUSH(x, i); TS(x).t = NS(x).t; TS(x).c = NS(x).c;
+		I i = TS(x)->v.i; PUSH(x, i); TS(x)->t = NS(x)->t; TS(x)->c = NS(x)->c;
 	}
 }
 void P_swap(X* x) { /* ( a b -- b a ) */ 
-	I t = TS(x).v.i; TS(x).v.i = NS(x).v.i; NS(x).v.i = t; 
-	t = TS(x).t; TS(x).t = NS(x).t; NS(x).t = t;
-	t = TS(x).c; TS(x).c = NS(x).c; NS(x).c = t;
+	I t = TS(x)->v.i; TS(x)->v.i = NS(x)->v.i; NS(x)->v.i = t; 
+	t = TS(x)->t; TS(x)->t = NS(x)->t; NS(x)->t = t;
+	t = TS(x)->c; TS(x)->c = NS(x)->c; NS(x)->c = t;
 }
 
 /* Execution */
@@ -315,27 +332,38 @@ void P_inner(X* x) {
 			case '[': 
 				OF1(x); 
 				PUSH(x, x->ip + 1); 
-				TS(x).t *= I8*ARRAY;
-				TS(x).c = P_forward(x, '[', ']'); 
+				TS(x)->t *= I8*ARRAY;
+				TS(x)->c = P_forward(x, '[', ']'); 
 				break;
-			case ']': if (x->rp > r) { x->ip = POPR(x); } else { if (x->rp > 0) { x->ip = POPR(x); } return; } break;
+			case ']': 
+        if (x->rp < r) { 
+          x->ip = popr(x); 
+        } else { 
+          if (x->rp < STACK_SIZE) { 
+            x->ip = popr(x); 
+          } 
+          return; 
+        } 
+        break;
 			case '?': UF2(x); P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 'l': UF3(x); P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 'b': UF3(x); P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
 			case 't': UF2(x); P_times(x, pop(x), (B*)pop(x)); break;
 			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
-			case '\'': OF1(x); PUSH(x, *++x->ip); TS(x).t *= CHAR; break;
+			case '\'': OF1(x); PUSH(x, *++x->ip); TS(x)->t *= CHAR; break;
 			case '"': 
 				OF1(x); 
 				PUSH(x, x->ip + 1); 
-				TS(x).t *= I8*ARRAY*STRING; 
-				TS(x).c = P_forward(x, 0, '"'); 
+				TS(x)->t *= I8*ARRAY*STRING; 
+				TS(x)->c = P_forward(x, 0, '"'); 
 				break;
+      /*
 			default:
 				op = *x->ip;
 				if (op >= 'A' && op <= 'Z') {
 					DO(x, x->ext[op - 'A']);
 				}
+      */
 		}
 		x->ip++;
 	} 
