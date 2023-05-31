@@ -1,8 +1,8 @@
 # Pangolin
 
-Concatenative imperative/functional language without garbage collection.
+Readable bytecode, data/return stacks based virtual machine with stack based memory management.
 
-Tries to be like Joy/Factor, while maintaining low level features.
+Work in progress.
 
 # External representation
 

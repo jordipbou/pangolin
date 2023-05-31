@@ -5,6 +5,14 @@
 #include<stdlib.h>
 #include<string.h>
 
+#ifndef Pmalloc
+#define Pmalloc(n) malloc(n)
+#endif
+
+#ifndef Pfree
+#define Pfree(p) free(p)
+#endif
+
 typedef char B;
 typedef intptr_t I;
 typedef double F;
@@ -81,7 +89,9 @@ I handle(X* x, I err) {
 
 #define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
 #define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
-#define PUSHS(x, s, l) OF1(x, { SP(x)++; SETI(PK(TS(x), INT, l, (I)s); })
+#define PUSHC(x, c) OF1(x, { SP(x)++, SETI(TS(x), INT*CHAR, 0, (I)c); })
+#define PUSHS(x, s, l) OF1(x, { SP(x)++; SETI(TS(x), INT*I8*ARRAY*STRING, l, (I)s); })
+#define PUSHM(x, p) OF1(x, { SP(x)++; SETI(TS(x), INT*MANAGED, 0, (I)p); })
 
 O* TO_R(X* x) {
   O* s, * d;
@@ -107,7 +117,7 @@ I POP(X* x) {
     i = o->v.i;
     SP(x)--;
     if (o->t % MANAGED == 0) { 
-      free((void*)TS(x)->v.i);
+      Pfree((void*)o->v.i);
       return 0;
     } else {
       return i;
@@ -130,7 +140,7 @@ B* RPOP(X* x) {
         return b;
       } else {
         if (o->t % MANAGED == 0) {
-          free((void*)o->v.i);
+          Pfree((void*)o->v.i);
         }
         RP(x)--;
       }

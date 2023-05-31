@@ -1,8 +1,14 @@
-#include"unity.h"
-#define ERR(x, c, e, b)   if (c) { if (handle(x, e)) { } else b } else b
-#include"pangolin.h"
-#include<string.h>
 #include<stdlib.h>
+#include"unity.h"
+
+#define ERR(x, c, e, b)   if (c) { if (handle(x, e)) { } else b } else b
+
+int allocated;
+
+#define Palloc(n) (allocated++, malloc(n))
+#define Pfree(p) (allocated--, free(p))
+
+#include"pangolin.h"
 
 B buf[255];
 X* x;
@@ -10,6 +16,7 @@ X* x;
 void setUp() {
 	memset(buf, 0, sizeof buf);
 	x = init();
+  allocated = 0;
 }
 
 void tearDown() {
@@ -124,8 +131,52 @@ void test_return_stack_2() {
   TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
 }
 
+void test_pop_and_free() {
+  I i;
+  void* a = Palloc(32);
+  TEST_ASSERT_EQUAL_INT(1, allocated);
+  PUSHM(x, a);
+  PUSH(x, 7);
+  i = POP(x);
+  TEST_ASSERT_EQUAL_INT(7, i);
+  i = POP(x);
+  TEST_ASSERT_EQUAL_INT(0, i);
+  TEST_ASSERT_EQUAL_INT(0, allocated);
+}
+
 void test_to_r() {
-  
+  I i;
+  void* a = Palloc(32);
+  O* o;
+  PUSHM(x, a);
+  o = TO_R(x);
+  TEST_ASSERT_EQUAL_INT(a, (void*)o->v.i);
+  TEST_ASSERT_EQUAL_INT(0, DEPTH(x));
+  TEST_ASSERT_EQUAL_INT(1, RDEPTH(x));
+  RPOP(x);
+  TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
+  TEST_ASSERT_EQUAL_INT(0, allocated);
+}
+
+void test_rpop() {
+  B* s1 = "[11+]";
+  B* s2 = "[01-]";
+  B* i;
+  RPUSH(x, s1);
+  PUSH(x, 7);
+  TO_R(x);
+  PUSH(x, 11);
+  TO_R(x);
+  RPUSH(x, s2);
+  PUSH(x, 13);
+  TO_R(x);
+  TEST_ASSERT_EQUAL_INT(5, RDEPTH(x));
+  i = RPOP(x);
+  TEST_ASSERT_EQUAL_PTR(s2, i);
+  TEST_ASSERT_EQUAL_INT(3, RDEPTH(x));
+  i = RPOP(x);
+  TEST_ASSERT_EQUAL_PTR(s1, i);
+  TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
 }
 
 int main() {
@@ -137,7 +188,10 @@ int main() {
   RUN_TEST(test_return_stack);
   RUN_TEST(test_return_stack_2);
 
+  RUN_TEST(test_pop_and_free);
+  
   RUN_TEST(test_to_r);
+  RUN_TEST(test_rpop);
   
 	return UNITY_END();
 }
