@@ -58,3 +58,22 @@ Tries to be like Joy/Factor, while maintaining low level features.
 							Types will change then to: INT, FLOAT, I8ARRAY, I16ARRAY, I32ARRAY and I64ARRAY.
 							Maybe struct/record type should also be added to manage C structs and more
 							advanced types implemented later.
+
+# C API
+
+    SP(x);
+    MAX_DEPTH(x);
+
+    PUSH(X* x, I v);
+    PUSHF(X* x, F v);
+    PUSHS(X* x, B* s, I l);
+
+    I POP(X* x);
+    F POPF(X* x);
+    B* POPS(X* x);
+
+    O* TO_R(X* x);
+
+    I RP(X* x);
+    I RMAX_DEPTH(X* x);
+    

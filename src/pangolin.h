@@ -9,77 +9,136 @@ typedef char B;
 typedef intptr_t I;
 typedef double F;
 
-enum {
-	ANY = 1,
-	INT = 2,
-	FLOAT = 3,
-	MANAGED = 5,
-	CHAR = 7,
-	ARRAY = 11,
-	I8 = 13,
-	I16 = 17,
-	I32 = 19,
-	I64 = 23,
-	STRING = 29,
-  RETURN = 31
-} T;
+enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, CHAR = 7, ARRAY = 11, I8 = 13, I16 = 17, I32 = 19, I64 = 23, STRING = 29, RETURN = 31 } T;
 
-typedef struct { 
-  I t;
-  I c; 
-  union { 
-    I i; 
-    F f; 
-  } v; 
-} O;
+typedef struct { I t; I c; union { I i; F f; } v; } O;
 
 #define SETI(_o, _t, _c, _v)  (_o->t = _t, _o->c = _c, _o->v.i = _v, _o)
 #define SETF(_o, _t, _c, _v)  (_o->t = _t, _o->c = _c, _o->v.f = _v, _o)
 
-#define STACK_SIZE				128
+#define STACK_SIZE 128
+#define RSTACK_SIZE 256
 
 typedef struct _X { 
 	O s[STACK_SIZE]; 
-	I sp, rp;
+	I sp;
+  O r[RSTACK_SIZE];
+  I rp;
 	B* ip; 
 	I tr; 
 	I err; 
 } X;
 
-#define ERROR(_x) (_x->err)
+typedef void (*FUNC)(X*);
 
-#define DEPTH(_x) (_x->sp)
-#define MAX_DEPTH(_x) STACK_SIZE
+#define ERROR(x) (x->err)
 
-typedef void (*FUNC)(struct _X*);
+#define SP(x) (x->sp)
+#define DEPTH(x) SP(x)
+#define MAX_DEPTH(x) (STACK_SIZE - 1)
+
+#define PK(x, i) (&x->s[i])
+#define TS(x) (PK(x, SP(x) - 1))
+#define NS(x)	(PK(x, SP(x) - 2))
+
+#define RP(x) (x->rp)
+#define RDEPTH(x) RP(x)
+#define RMAX_DEPTH(x) (RSTACK_SIZE - 1)
+
+#define RPK(x, i) (&x->r[i])
+#define TR(x) (RPK(x, RP(x) - 1))
 
 void P_inner(X*);
 
 #define ERR_OK									0
 #define ERR_STACK_OVERFLOW			-1
 #define ERR_STACK_UNDERFLOW			-2
-#define ERR_RSTACK_UNDERFLOW    -3
-#define ERR_DIVIDE_BY_ZERO			-4
-#define ERR_EXIT								-5
+#define ERR_RSTACK_OVERFLOW     -3
+#define ERR_RSTACK_UNDERFLOW    -4
+#define ERR_DIVIDE_BY_ZERO			-5
+#define ERR_EXIT								-6
 
-I error(X* x) {
-	/* TODO: Find in exception stack a handler for current error */
-	printf("ERROR: %ld\n", x->err);
+I handle(X* x, I err) {
+  ERROR(x) = err;
 	return 1;
 }
 
-#define ERR(_x, _c, _e)   if (_c) { _x->err = _e; if (error(_x)) return; }
+#ifndef ERR
+#define ERR(x, c, e, b)   if (c) { if (handle(x, e)) { return; } else b } else b
+#endif
 
-#define OF1(_x)			      ERR(_x, _x->sp == _x->rp, ERR_STACK_OVERFLOW)
-#define OF2(_x)			      ERR(_x, _x->sp >= _x->rp - 1, ERR_STACK_OVERFLOW)
-#define UF1(_x)			      ERR(_x, _x->sp == 0, ERR_STACK_UNDERFLOW)
-#define UF2(_x)			      ERR(_x, _x->sp <= 1, ERR_STACK_UNDERFLOW)
-#define UF3(_x)			      ERR(_x, _x->sp <= 2, ERR_STACK_UNDERFLOW)
-#define UF4(_x)			      ERR(_x, _x->sp <= 3, ERR_STACK_UNDERFLOW)
-#define RUF1(_x)          ERR(_x, _x->rp < STACK_SIZE, ERR_RSTACK_UNDERFLOW)
-#define DZ(_x)				    ERR(_x, TS(_x)->v.i == 0, ERR_DIVIDE_BY_ZERO)
+#define OF1(x, b) ERR(x, SP(x) == MAX_DEPTH(x), ERR_STACK_OVERFLOW, b)
+#define OF2(x, b) ERR(x, SP(x) >= MAX_DEPTH(x) - 1, ERR_STACK_OVERFLOW, b)
+#define UF1(x, b) ERR(x, SP(x) == 0, ERR_STACK_UNDERFLOW, b)
+#define UF2(x, b) ERR(x, SP(x) <= 1, ERR_STACK_UNDERFLOW, b)
+#define UF3(x, b) ERR(x, SP(x) <= 2, ERR_STACK_UNDERFLOW, b)
+#define UF4(x, b) ERR(x, SP(x) <= 3, ERR_STACK_UNDERFLOW, b)
+#define ROF1(x, b) ERR(x, RP(x) == RMAX_DEPTH(x), ERR_RSTACK_OVERFLOW, b)
+#define RUF1(x, b) ERR(x, RP(x) == 0, ERR_RSTACK_UNDERFLOW, b)
+#define DZ(x, b) ERR(x, TS(x)->v.i == 0, ERR_DIVIDE_BY_ZERO, b)
 
-#define DO(_x, _f)		    _f(_x); if (_x->err) { return; }
+#define DO(x, f) f(x); if (ERROR(x)) { return; }
+
+#define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
+#define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
+#define PUSHS(x, s, l) OF1(x, { SP(x)++; SETI(PK(TS(x), INT, l, (I)s); })
+
+O* TO_R(X* x) {
+  O* s, * d;
+  UF1(x, { 
+    ROF1(x, {
+      x->rp++;
+      s = TS(x);
+      d = TR(x);
+      d->t = s->t;
+      d->c = s->c;
+      d->v.i = s->v.i;
+      x->sp--;
+      return d;
+    })
+  })
+}
+
+I POP(X* x) { 
+  O* o;
+  I i;
+  UF1(x, {
+    o = TS(x);
+    i = o->v.i;
+    SP(x)--;
+    if (o->t % MANAGED == 0) { 
+      free((void*)TS(x)->v.i);
+      return 0;
+    } else {
+      return i;
+    }
+  })
+}
+
+#define POPF(x) UF1(x, { PK(_x, --_x->sp).v.f); })
+
+#define RPUSH(x, v) ROF1(x, { RP(x)++; SETI(TR(x), RETURN, 0, (I)v); })
+
+B* RPOP(X* x) {
+  O* o;
+  RUF1(x, {
+    while (RP(x) > 0) {
+      o = TR(x);
+      if (o->t % RETURN == 0) {
+        B* b = (B*)o->v.i;
+        RP(x)--;
+        return b;
+      } else {
+        if (o->t % MANAGED == 0) {
+          free((void*)o->v.i);
+        }
+        RP(x)--;
+      }
+    }
+  })
+}
+
+#define CALL(x, d, t)					if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { RPUSH(x, x->ip); } x->ip = d
 
 X* init() {
 	X* x = malloc(sizeof(X));
@@ -88,61 +147,6 @@ X* init() {
 	x->ip = 0;
 	return x;
 }
-
-#define PK(_x, _i)						(&_x->s[_i])
-
-#define TS(_x)								(PK(_x, x->sp - 1))
-#define NS(_x)								(PK(_x, x->sp - 2))
-
-#define TR(_x)                (PK(_x, x->rp))
-
-#define PUSH(_x, _v)					OF1(_x); SETI(PK(_x, _x->sp++), INT, 0, (I)_v)
-#define PUSHF(_x, _v)					OF1(_x); SETF(PK(_x, _x->sp++), FLOAT, 0, (F)_v)
-
-O* dispose(X* x) {
-  O* o = TS(x);
-  x->sp--;
-  x->rp--;
-  TR(x)->t = o->t;
-  TR(x)->c = o->c;
-  TR(x)->v.i = o->v.i;
-  return TR(x);
-}
-
-I pop(X* x) { 
-  O* o;
-  I i;
-  UF1(x);
-  o = TS(x); 
-  i = o->v.i; 
-  if (o->t % MANAGED == 0) { 
-    free((void*)o->v.i); 
-  }
-  return i;
-}
-
-#define POPF(_x)							(UF1(_x), PK(_x, --_x->sp).v.f)
-
-#define PUSHR(_x, _i)					SETI(PK(_x, _x->rp--), RETURN, 0, (I)_i)
-
-B* popr(X* x) {
-  O* o;
-  while (x->rp < STACK_SIZE) {
-    o = PK(x, x->rp);
-    if (o->t % RETURN == 0) {
-      B* b = (B*)o->v.i;
-      x->rp++;
-      return b;
-    } else {
-      if (o->t % MANAGED == 0) {
-        free((void*)o->v.i);
-      }
-      x->rp++;
-    }
-  }
-}
-
-#define CALL(x, d, t)					if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { PUSHR(x, x->ip); } x->ip = d
 
 /* External representation */
 
@@ -190,51 +194,54 @@ I dump(B* s, X* x) {
 }
 
 /* Arithmetic operations */
-void P_add(X* x) { /* ( n n -- n ) */ NS(x)->v.i += TS(x)->v.i; x->sp--; }
-void P_sub(X* x) { /* ( n n -- n ) */ NS(x)->v.i -= TS(x)->v.i; x->sp--; }
-void P_mul(X* x) { /* ( n n -- n ) */ NS(x)->v.i *= TS(x)->v.i; x->sp--; }
-void P_div(X* x) { /* ( n n -- n ) */ NS(x)->v.i /= TS(x)->v.i; x->sp--; }
-void P_mod(X* x) { /* ( n n -- n ) */ NS(x)->v.i %= TS(x)->v.i; x->sp--; }
+void P_add(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i += TS(x)->v.i; x->sp--; }); }
+void P_sub(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i -= TS(x)->v.i; x->sp--; }); }
+void P_mul(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i *= TS(x)->v.i; x->sp--; }); }
+void P_div(X* x) { /* ( n n -- n ) */ UF2(x, { DZ(x, { NS(x)->v.i /= TS(x)->v.i; x->sp--; }); }); }
+void P_mod(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i %= TS(x)->v.i; x->sp--; }); }
 
 /* Comparison operations */
-void P_lt(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i < TS(x)->v.i; x->sp--; }
-void P_eq(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i == TS(x)->v.i; x->sp--; }
-void P_gt(X* x) { /* ( n n -- n ) */ NS(x)->v.i = NS(x)->v.i > TS(x)->v.i; x->sp--; }
+void P_lt(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i < TS(x)->v.i; x->sp--; }); }
+void P_eq(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i == TS(x)->v.i; x->sp--; }); }
+void P_gt(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i > TS(x)->v.i; x->sp--; }); }
 
-void P_not(X* x) { /* ( n -- n ) */ TS(x)->v.i = !TS(x)->v.i; }
+void P_not(X* x) { /* ( n -- n ) */ UF1(x, { TS(x)->v.i = !TS(x)->v.i; }); }
 
 /* Stack operations */
 /* TODO: Do I need to clone arrays here or just duplicate its address? */
 /* Only managed items can not be duplicated because if one its dropped the address will be
    freed */
 void P_dup(X* x) { /* ( a -- a a ) */ 
-	if (TS(x)->t % ARRAY == 0) {
-		I sz;
-    void* a;
-		if (TS(x)->t % CHAR == 0 || TS(x)->t % I8 == 0) sz = 1;
-		else if (TS(x)->t % I16 == 0) sz = 2;
-		else if (TS(x)->t % I32 == 0) sz = 4;
-		else if (TS(x)->t % I64 == 0) sz = 8;
-		a = malloc(TS(x)->c * sz);
-		PUSH(x, a);
-		TS(x)->t = NS(x)->t % MANAGED == 0 ? NS(x)->t : NS(x)->t * MANAGED;
-		TS(x)->c = NS(x)->c;
-		strncpy((B*)TS(x)->v.i, (B*)NS(x)->v.i, NS(x)->c * sz);
-	} else {
-		I i = TS(x)->v.i; PUSH(x, i); TS(x)->t = NS(x)->t; TS(x)->c = NS(x)->c;
-	}
+  UF1(x, {
+    OF1(x, {
+	    if (TS(x)->t % ARRAY == 0) {
+	      I sz;
+        void* a;
+	      if (TS(x)->t % CHAR == 0 || TS(x)->t % I8 == 0) sz = 1;
+	      else if (TS(x)->t % I16 == 0) sz = 2;
+	      else if (TS(x)->t % I32 == 0) sz = 4;
+	      else if (TS(x)->t % I64 == 0) sz = 8;
+	      a = malloc(TS(x)->c * sz);
+	      PUSH(x, a);
+	      TS(x)->t = NS(x)->t % MANAGED == 0 ? NS(x)->t : NS(x)->t * MANAGED;
+	      TS(x)->c = NS(x)->c;
+	      strncpy((B*)TS(x)->v.i, (B*)NS(x)->v.i, NS(x)->c * sz);
+	    } else {
+	      I i = TS(x)->v.i; PUSH(x, i); TS(x)->t = NS(x)->t; TS(x)->c = NS(x)->c;
+	    }
+    });
+  });
 }
 void P_swap(X* x) { /* ( a b -- b a ) */ 
-	I t = TS(x)->v.i; TS(x)->v.i = NS(x)->v.i; NS(x)->v.i = t; 
-	t = TS(x)->t; TS(x)->t = NS(x)->t; NS(x)->t = t;
-	t = TS(x)->c; TS(x)->c = NS(x)->c; NS(x)->c = t;
+  UF2(x, {
+	  I t = TS(x)->v.i; TS(x)->v.i = NS(x)->v.i; NS(x)->v.i = t; 
+	  t = TS(x)->t; TS(x)->t = NS(x)->t; NS(x)->t = t;
+	  t = TS(x)->c; TS(x)->c = NS(x)->c; NS(x)->c = t;
+  });
 }
 
 /* Execution */
-/* TODO: This will not work with managed blocks because the block will be popped out before
-   its executed!!!! */
-/* This should be changed to O o = init from TS; CALL(...1); inner(x); free(o) if needed. */
-void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)pop(x); CALL(x, q - 1, 0); }
+void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)TO_R(x)->v.i; CALL(x, q - 1, 0); }
 
 /* Conditional and looping operations */
 void P_ifthen(X* x, I c, B* t, B* e) { /* ( flag [P] [Q] -- P|Q ) */ CALL(x, (c ? t : e) - 1, 0); }
@@ -246,7 +253,7 @@ void P_times(X* x, I t, B* q) { /* ( n [P] -- %n times P% ) */
 void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
 	do { 
 		CALL(x, c, 1); DO(x, P_inner);
-		if (!pop(x)) { return; } 
+		if (!POP(x)) { return; } 
 		CALL(x, q, 1); DO(x, P_inner);
 	} while(1); 
 }
@@ -254,7 +261,7 @@ void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
 /* Recursion operations */
 void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
 	CALL(x, i, 1); DO(x, P_inner);
-	if (pop(x)) { CALL(x, t, 1); DO(x, P_inner); }
+	if (POP(x)) { CALL(x, t, 1); DO(x, P_inner); }
 	else {
 		CALL(x, r1, 1); DO(x, P_inner);
 		P_linrec(x, i, t, r1, r2);
@@ -264,7 +271,7 @@ void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
 
 void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
 	CALL(x, i, 1); P_inner(x);
-	if (pop(x)) { CALL(x, t, 1); P_inner(x); } 
+	if (POP(x)) { CALL(x, t, 1); P_inner(x); } 
 	else {
 		CALL(x, r1, 1); P_inner(x);
 		P_binrec(x, i, t, r1, r2);
@@ -316,52 +323,54 @@ void P_inner(X* x) {
 			printf("%s", buf);
 		}
 		switch (*x->ip) {
-			case '$': UF1(x); x->tr = pop(x); break;
+			case '$': UF1(x, { x->tr = POP(x); }); break;
 			case 'q': x->err = ERR_EXIT; return; break;
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
 			case '#': P_number(x); break;
-			case '+': UF2(x); P_add(x); break;
-			case '-': UF2(x); P_sub(x); break;
-			case '*': UF2(x); P_mul(x); break;
-			case '/': UF2(x); DZ(x); P_div(x); break;
-			case '%': UF2(x); P_mod(x); break;
-			case '<': UF2(x); P_lt(x); break;
-			case '=': UF2(x); P_eq(x); break;
-			case '>': UF2(x); P_gt(x); break;
-			case '!': UF1(x); P_not(x); break;
-			case 'd': UF1(x); OF1(x); P_dup(x); break;
-			case 's': UF2(x); P_swap(x); break;
-			case '\\': UF1(x); pop(x); break;
-			case 'i': UF1(x); P_exec_i(x); break;
+			case '+': P_add(x); break;
+			case '-': P_sub(x); break;
+			case '*': P_mul(x); break;
+			case '/': P_div(x); break;
+			case '%': P_mod(x); break;
+			case '<': P_lt(x); break;
+			case '=': P_eq(x); break;
+			case '>': P_gt(x); break;
+			case '!': P_not(x); break;
+			case 'd': P_dup(x); break;
+			case 's': P_swap(x); break;
+			case '\\': POP(x); break;
+			case 'i': P_exec_i(x); break;
 			case '[': 
-				OF1(x); 
-				PUSH(x, x->ip + 1); 
-				TS(x)->t *= I8*ARRAY;
-				TS(x)->c = P_forward(x, '[', ']'); 
+				OF1(x, { 
+				  PUSH(x, x->ip + 1); 
+				  TS(x)->t *= I8*ARRAY;
+				  TS(x)->c = P_forward(x, '[', ']'); 
+        });
 				break;
 			case ']': 
         if (x->rp < r) { 
-          x->ip = popr(x); 
+          x->ip = RPOP(x); 
         } else { 
           if (x->rp < STACK_SIZE) { 
-            x->ip = popr(x); 
+            x->ip = RPOP(x); 
           } 
           return; 
         } 
         break;
-			case '?': UF2(x); P_ifthen(x, pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 'l': UF3(x); P_linrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 'b': UF3(x); P_binrec(x, (B*)pop(x), (B*)pop(x), (B*)pop(x), (B*)pop(x)); break;
-			case 't': UF2(x); P_times(x, pop(x), (B*)pop(x)); break;
-			case 'w': UF2(x); P_while(x, (B*)pop(x), (B*)pop(x)); break;
-			case '\'': OF1(x); PUSH(x, *++x->ip); TS(x)->t *= CHAR; break;
+			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			case 'b': P_binrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
+			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			case '\'': OF1(x, { PUSH(x, *++x->ip); TS(x)->t *= CHAR; }); break;
 			case '"': 
-				OF1(x); 
-				PUSH(x, x->ip + 1); 
-				TS(x)->t *= I8*ARRAY*STRING; 
-				TS(x)->c = P_forward(x, 0, '"'); 
-				break;
+				OF1(x, {
+				  PUSH(x, x->ip + 1); 
+				  TS(x)->t *= I8*ARRAY*STRING; 
+				  TS(x)->c = P_forward(x, 0, '"'); 
+        });
+        break;
       /*
 			default:
 				op = *x->ip;

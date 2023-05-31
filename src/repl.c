@@ -35,8 +35,10 @@ int _getch ()
 }
 #endif
 
+/*
 void key(X* x) { PUSH(x, _getch()); }
 void emit(X* x) { printf("%c", (char)pop(x)); }
+*/
 
 int main() {
 	B buf[255];
