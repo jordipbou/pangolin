@@ -16,6 +16,8 @@ X* x;
 void setUp() {
 	memset(buf, 0, sizeof buf);
 	x = init();
+  SP(x) = 0;
+  RP(x) = 0;
   allocated = 0;
 }
 
@@ -179,6 +181,47 @@ void test_rpop() {
   TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
 }
 
+void test_dump_o() {
+  PUSH(x, 7);
+  dump_o(buf, TS(x));
+  TEST_ASSERT_EQUAL_STRING("7", buf);
+  
+  PUSHF(x, 3.1415);
+  memset(buf, 0, sizeof buf);
+  dump_o(buf, TS(x));
+  TEST_ASSERT_EQUAL_STRING("3.1415", buf);
+
+  PUSHC(x, 'a');
+  memset(buf, 0, sizeof buf);
+  dump_o(buf, TS(x));
+  TEST_ASSERT_EQUAL_STRING("a", buf);
+
+  PUSHS(x, "test string", strlen("test string"));
+  memset(buf, 0, sizeof buf);
+  dump_o(buf, TS(x));
+  TEST_ASSERT_EQUAL_STRING("\"test string\"", buf);
+
+  RPUSH(x, "[11+]");
+  memset(buf, 0, sizeof buf);
+  dump_o(buf, TR(x));
+  TEST_ASSERT_EQUAL_STRING("[11+]", buf);
+
+  RPUSH(x, "11+[01-]i]sd");
+  memset(buf, 0, sizeof buf);
+  dump_o(buf, TR(x));
+  TEST_ASSERT_EQUAL_STRING("11+[01-]i]", buf); 
+}
+
+void test_dump_rstack() {
+  IP(x) = "11+]";
+  PUSH(x, 7);
+  TO_R(x);
+  RPUSH(x, "ds");
+  memset(buf, 0, sizeof buf);
+  dump_rstack(buf, x);
+  TEST_ASSERT_EQUAL_STRING("11+] : ds", buf);
+}
+
 int main() {
 	UNITY_BEGIN();
 
@@ -192,6 +235,9 @@ int main() {
   
   RUN_TEST(test_to_r);
   RUN_TEST(test_rpop);
+
+  RUN_TEST(test_dump_o);
+  RUN_TEST(test_dump_rstack);
   
 	return UNITY_END();
 }

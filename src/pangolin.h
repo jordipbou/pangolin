@@ -17,7 +17,7 @@ typedef char B;
 typedef intptr_t I;
 typedef double F;
 
-enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, CHAR = 7, ARRAY = 11, I8 = 13, I16 = 17, I32 = 19, I64 = 23, STRING = 29, RETURN = 31 } T;
+enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, CHAR = 7, ARRAY = 11, I8 = 13, I16 = 17, I32 = 19, I64 = 23, STRING = 29, QUOTATION = 31, RETURN = 37 } T;
 
 typedef struct { I t; I c; union { I i; F f; } v; } O;
 
@@ -40,6 +40,8 @@ typedef struct _X {
 typedef void (*FUNC)(X*);
 
 #define ERROR(x) (x->err)
+
+#define IP(X) (x->ip)
 
 #define SP(x) (x->sp)
 #define DEPTH(x) SP(x)
@@ -89,7 +91,7 @@ I handle(X* x, I err) {
 
 #define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
 #define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
-#define PUSHC(x, c) OF1(x, { SP(x)++, SETI(TS(x), INT*CHAR, 0, (I)c); })
+#define PUSHC(x, c) OF1(x, { SP(x)++; SETI(TS(x), INT*CHAR, 0, (I)c); })
 #define PUSHS(x, s, l) OF1(x, { SP(x)++; SETI(TS(x), INT*I8*ARRAY*STRING, l, (I)s); })
 #define PUSHM(x, p) OF1(x, { SP(x)++; SETI(TS(x), INT*MANAGED, 0, (I)p); })
 
@@ -125,7 +127,7 @@ I POP(X* x) {
   })
 }
 
-#define POPF(x) UF1(x, { PK(_x, --_x->sp).v.f); })
+#define POPF(x) UF1(x, { PK(x, --SP(x))->v.f); })
 
 #define RPUSH(x, v) ROF1(x, { RP(x)++; SETI(TR(x), RETURN, 0, (I)v); })
 
@@ -148,7 +150,7 @@ B* RPOP(X* x) {
   })
 }
 
-#define CALL(x, d, t)					if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { RPUSH(x, x->ip); } x->ip = d
+#define CALL(x, d, t) if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { RPUSH(x, x->ip); } x->ip = d
 
 X* init() {
 	X* x = malloc(sizeof(X));
@@ -160,9 +162,13 @@ X* init() {
 
 /* External representation */
 
+#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
+
 I dump_o(B* s, O* o) {
 	if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
-	else if (o->t % CHAR == 0) { return sprintf(s, "%c", (char)o->v.i); }
+  else if (o->t % RETURN == 0) { I i, t = 1, n = 0; DUMP_CODE((B*)o->v.i); return n; }
+  else if (o->t % QUOTATION == 0) { I i, t = 1, n = 1; *s++ = '['; DUMP_CODE((B*)o->v.i); return n; }	
+  else if (o->t % CHAR == 0) { return sprintf(s, "%c", (char)o->v.i); }
 	else if (o->t % INT == 0) { return sprintf(s, "%ld", o->v.i); } 
 	else if (o->t % FLOAT == 0) { return sprintf(s, "%g", o->v.f); }
 }
@@ -179,15 +185,18 @@ I dump_stack(B* s, X* x, I nl) {
 	return n;
 }
 
-#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
 #define SEPARATOR	*s++ = ' '; *s++ = ':'; *s++ = ' '; n += 3;
 
 I dump_rstack(B* s, X* x) {
-	I i, j, t = 1, n = 0;
-	DUMP_CODE(x->ip);
-	for (j = STACK_SIZE - 1; j >= x->rp; j--) { SEPARATOR; t = 1; DUMP_CODE((B*)PK(x, j)->v.i); }
+  I i, j, t = 1, n = 0;
+  DUMP_CODE(x->ip);
+  for (j = RDEPTH(x) - 1; j >= 0; j--) {
+    if (RPK(x, j)->t % RETURN == 0) {
+      SEPARATOR; t = 1; DUMP_CODE((B*)RPK(x, j)->v.i);
+    }
+  }
 
-	return n;
+  return n;
 }
 
 I dump(B* s, X* x) {
@@ -218,9 +227,6 @@ void P_gt(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i > TS(x)->v
 void P_not(X* x) { /* ( n -- n ) */ UF1(x, { TS(x)->v.i = !TS(x)->v.i; }); }
 
 /* Stack operations */
-/* TODO: Do I need to clone arrays here or just duplicate its address? */
-/* Only managed items can not be duplicated because if one its dropped the address will be
-   freed */
 void P_dup(X* x) { /* ( a -- a a ) */ 
   UF1(x, {
     OF1(x, {
@@ -353,17 +359,17 @@ void P_inner(X* x) {
 			case 'i': P_exec_i(x); break;
 			case '[': 
 				OF1(x, { 
-				  PUSH(x, x->ip + 1); 
-				  TS(x)->t *= I8*ARRAY;
+				  PUSH(x, IP(x) + 1); 
+				  TS(x)->t *= I8*ARRAY*QUOTATION;
 				  TS(x)->c = P_forward(x, '[', ']'); 
         });
 				break;
 			case ']': 
-        if (x->rp < r) { 
-          x->ip = RPOP(x); 
+        if (RP(x) < r) { 
+          IP(x) = RPOP(x); 
         } else { 
-          if (x->rp < STACK_SIZE) { 
-            x->ip = RPOP(x); 
+          if (RP(x) < STACK_SIZE) { 
+            IP(x) = RPOP(x); 
           } 
           return; 
         } 
@@ -398,6 +404,7 @@ void P_repl(X* x) {
 
 	do {
 		printf("IN: ");
+    memset(buf, 0, sizeof buf);
 		fgets(buf, 255, stdin);
 		x->ip = buf;
 		P_inner(x);
