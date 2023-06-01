@@ -34,10 +34,15 @@ typedef struct _X {
   I rp;
 	B* ip; 
 	I tr; 
-	I err; 
+	I err;
+  void (*k)(struct _X*);
+  void (*e)(struct _X*);
 } X;
 
 typedef void (*FUNC)(X*);
+
+#define KEY(x) (x->k(x))
+#define EMIT(x) (x->e(x))
 
 #define ERROR(x) (x->err)
 
@@ -66,7 +71,8 @@ void P_inner(X*);
 #define ERR_RSTACK_OVERFLOW     -3
 #define ERR_RSTACK_UNDERFLOW    -4
 #define ERR_DIVIDE_BY_ZERO			-5
-#define ERR_EXIT								-6
+#define ERR_STRING_EXPECTED     -6
+#define ERR_EXIT								-7
 
 I handle(X* x, I err) {
   ERROR(x) = err;
@@ -86,6 +92,7 @@ I handle(X* x, I err) {
 #define ROF1(x, b) ERR(x, RP(x) == RMAX_DEPTH(x), ERR_RSTACK_OVERFLOW, b)
 #define RUF1(x, b) ERR(x, RP(x) == 0, ERR_RSTACK_UNDERFLOW, b)
 #define DZ(x, b) ERR(x, TS(x)->v.i == 0, ERR_DIVIDE_BY_ZERO, b)
+#define SE(x, b) ERR(x, TS(x)->t % STRING != 0, ERR_STRING_EXPECTED, b)
 
 #define DO(x, f) f(x); if (ERROR(x)) { return; }
 
@@ -237,7 +244,7 @@ void P_dup(X* x) { /* ( a -- a a ) */
 	      else if (TS(x)->t % I16 == 0) sz = 2;
 	      else if (TS(x)->t % I32 == 0) sz = 4;
 	      else if (TS(x)->t % I64 == 0) sz = 8;
-	      a = malloc(TS(x)->c * sz);
+	      a = Pmalloc(TS(x)->c * sz);
 	      PUSH(x, a);
 	      TS(x)->t = NS(x)->t % MANAGED == 0 ? NS(x)->t : NS(x)->t * MANAGED;
 	      TS(x)->c = NS(x)->c;
@@ -255,6 +262,14 @@ void P_swap(X* x) { /* ( a b -- b a ) */
 	  t = TS(x)->c; TS(x)->c = NS(x)->c; NS(x)->c = t;
   });
 }
+void P_over(X* x) { /* ( a b -- a b a ) */
+  UF2(x, {
+    /* TODO: Arrays must be cloned !! */
+    I i = NS(x)->v.i;
+    PUSH(x, i);
+  })
+}
+/* TODO: Implement and rot */
 
 /* Execution */
 void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)TO_R(x)->v.i; CALL(x, q - 1, 0); }
@@ -295,6 +310,45 @@ void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
 		P_binrec(x, i, t, r1, r2);
 		CALL(x, r2, 1); P_inner(x);
 	}
+}
+
+/* Input/output */
+void P_print(X* x) {
+  SE(x, {
+    O* s = TO_R(x);
+    I i;
+    for (i = 0; i < s->c; i++) {
+      PUSH(x, ((B*)s->v.i)[i]);
+      EMIT(x);
+    }
+  });
+}
+
+void P_read(X* x) {
+  B* s;
+  I c, i;
+  OF1(x, {
+    PUSH(x, 0);
+    do {
+      DO(x, KEY);
+      DO(x, P_dup);
+      DO(x, EMIT);
+      if (TS(x)->v.i == 10) {
+        POP(x);
+        c = POP(x);
+        s = (B*)Pmalloc(c);
+        for (i = c - 1; i >= 0; i--) {
+          s[i] = (B)POP(x); 
+        } 
+        PUSHS(x, s, c);
+        TS(x)->t *= MANAGED;
+        return;
+      } else {
+        DO(x, P_swap);
+        TS(x)->v.i++;
+      }
+    } while(1);
+  });
 }
 
 /* Parsing */
@@ -344,6 +398,10 @@ void P_inner(X* x) {
 			case '0': PUSH(x, 0); break;
 			case '1': PUSH(x, 1); break;
 			case '#': P_number(x); break;
+      case 'k': DO(x, KEY); break;
+      case 'e': DO(x, EMIT); break;
+      case 'p': P_print(x); break;
+      case 'r': P_read(x); break;
 			case '+': P_add(x); break;
 			case '-': P_sub(x); break;
 			case '*': P_mul(x); break;
@@ -355,6 +413,8 @@ void P_inner(X* x) {
 			case '!': P_not(x); break;
 			case 'd': P_dup(x); break;
 			case 's': P_swap(x); break;
+      case 'o': P_over(x); break;
+      /* TODO: Implement rot */
 			case '\\': POP(x); break;
 			case 'i': P_exec_i(x); break;
 			case '[': 

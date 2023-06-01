@@ -1,5 +1,6 @@
 #include<stdio.h>
 #include<string.h>
+
 #include"pangolin.h"
 
 #ifdef _WIN32
@@ -35,19 +36,15 @@ int _getch ()
 }
 #endif
 
-/*
-void key(X* x) { PUSH(x, _getch()); }
-void emit(X* x) { printf("%c", (char)pop(x)); }
-*/
+void key(X* x) { OF1(x, { PUSH(x, _getch()); }); }
+void emit(X* x) { UF1(x, { printf("%c", (char)POP(x)); }); }
 
 int main() {
 	B buf[255];
 	X* x = init();
 
-	/*
-	KEY(x) = &key;
-	EMIT(x) = &emit;
-	*/
+	x->k = &key;
+	x->e = &emit;
 
 	x->tr = 1;
 
