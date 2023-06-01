@@ -17,7 +17,7 @@ typedef char B;
 typedef intptr_t I;
 typedef double F;
 
-enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, CHAR = 7, ARRAY = 11, I8 = 13, I16 = 17, I32 = 19, I64 = 23, STRING = 29, QUOTATION = 31, RETURN = 37 } T;
+enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, ARRAY = 7, I8 = 11, I16 = 13, I32 = 17, I64 = 19, RETURN = 23 } T;
 
 typedef struct { I t; I c; union { I i; F f; } v; } O;
 
@@ -94,7 +94,6 @@ I handle(X* x, I err) {
 #define ROF1(x, b) ERR(x, RP(x) == RMAX_DEPTH(x), ERR_RSTACK_OVERFLOW, b)
 #define RUF1(x, b) ERR(x, RP(x) == 0, ERR_RSTACK_UNDERFLOW, b)
 #define DZ(x, b) ERR(x, TS(x)->v.i == 0, ERR_DIVIDE_BY_ZERO, b)
-#define SE(x, b) ERR(x, TS(x)->t % STRING != 0, ERR_STRING_EXPECTED, b)
 
 #define DO(x, f) f(x); if (ERROR(x)) { return; }
 #define DO1(x, f, a) f(x, a); if (ERROR(x)) { return; }
@@ -102,8 +101,6 @@ I handle(X* x, I err) {
 
 #define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
 #define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
-#define PUSHC(x, c) OF1(x, { SP(x)++; SETI(TS(x), INT*CHAR, 0, (I)c); })
-#define PUSHS(x, s, l) OF1(x, { SP(x)++; SETI(TS(x), INT*I8*ARRAY*STRING, l, (I)s); })
 #define PUSHM(x, p) OF1(x, { SP(x)++; SETI(TS(x), INT*MANAGED, 0, (I)p); })
 
 O* TO_R(X* x) {
@@ -176,10 +173,26 @@ X* init() {
 #define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
 
 I dump_o(B* s, O* o) {
-	if (o->t % STRING == 0) { return sprintf(s, "\"%.*s\"", (int)o->c, (B*)o->v.i); } 
+	if (o->t % ARRAY == 0) {
+		I i, n = 0, t;
+		if (o->t % I8 == 0) {
+			I r = 1; 
+			for (i = 0; i < o->c; i++) {
+				if (((B*)o->v.i)[i] < 31 || ((B*)o->v.i)[i] > 126) { r = 0; }
+			}
+			if (r) {
+				return sprintf(s, "[%.*s]", (unsigned int)o->c, (B*)o->v.i);
+			} else {
+				s += t = sprintf(s, "["); n += t;
+				for (i = 0; i < o->c; i++) {
+					s += t = sprintf(s, "%d ", ((B*)o->v.i)[i]); n += t;
+				}
+				s += t = sprintf(s, "]"); n += t;
+				return n;
+			}
+		}
+	}
   else if (o->t % RETURN == 0) { I i, t = 1, n = 0; DUMP_CODE((B*)o->v.i); return n; }
-  else if (o->t % QUOTATION == 0) { I i, t = 1, n = 1; *s++ = '['; DUMP_CODE((B*)o->v.i); return n; }	
-  else if (o->t % CHAR == 0) { return sprintf(s, "%c", (char)o->v.i); }
 	else if (o->t % INT == 0) { return sprintf(s, "%ld", o->v.i); } 
 	else if (o->t % FLOAT == 0) { return sprintf(s, "%g", o->v.f); }
 }
@@ -246,7 +259,7 @@ void P_dup(X* x) { /* ( a -- a a ) */
 	    if (TS(x)->t % ARRAY == 0) {
 	      I sz;
         void* a;
-	      if (TS(x)->t % CHAR == 0 || TS(x)->t % I8 == 0) sz = 1;
+	      if (TS(x)->t % I8 == 0) sz = 1;
 	      else if (TS(x)->t % I16 == 0) sz = 2;
 	      else if (TS(x)->t % I32 == 0) sz = 4;
 	      else if (TS(x)->t % I64 == 0) sz = 8;
@@ -348,16 +361,29 @@ void P_zip(X* x, B* q) {
   });
 }
 
+void P_fold(X* x, B* q) {
+	OF1(x, {
+		O* o = TS(x);
+		B* a = (B*)o->v.i;
+		I i;
+		PUSH(x, a[0]);
+		for (i = 1; i < o->c; i++) {
+			PUSH(x, a[i]);
+			CALL(x, q, 1); DO(x, P_inner);
+		}
+		DO(x, P_swap);
+		POP(x);
+	});
+}
+
 /* Input/output */
 void P_print(X* x) {
-  SE(x, {
-    O* s = TO_R(x);
-    I i;
-    for (i = 0; i < s->c; i++) {
-      PUSH(x, ((B*)s->v.i)[i]);
-      EMIT(x);
-    }
-  });
+  O* s = TO_R(x);
+  I i;
+  for (i = 0; i < s->c; i++) {
+    PUSH(x, ((B*)s->v.i)[i]);
+    EMIT(x);
+  }
 }
 
 void P_read(X* x) {
@@ -376,8 +402,9 @@ void P_read(X* x) {
         for (i = c - 1; i >= 0; i--) {
           s[i] = (B)POP(x); 
         } 
-        PUSHS(x, s, c);
-        TS(x)->t *= MANAGED;
+        PUSH(x, s);
+				TS(x)->c = c;
+        TS(x)->t *= I8*ARRAY*MANAGED;
         return;
       } else {
         DO(x, P_swap);
@@ -458,7 +485,7 @@ void P_inner(X* x) {
 			case '[': 
 				OF1(x, { 
 				  PUSH(x, IP(x) + 1); 
-				  TS(x)->t *= I8*ARRAY*QUOTATION;
+				  TS(x)->t *= I8*ARRAY;
 				  TS(x)->c = P_forward(x, '[', ']'); 
         });
 				break;
@@ -479,7 +506,9 @@ void P_inner(X* x) {
 			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
       case 'm': DO1(x, P_map, (B*)TO_R(x)->v.i); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '\'': OF1(x, { PUSH(x, *++x->ip); TS(x)->t *= CHAR; }); break;
+			case 'f': DO1(x, P_fold, (B*)TO_R(x)->v.i); break;
+			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
+			/*
 			case '"': 
 				OF1(x, {
 				  PUSH(x, x->ip + 1); 
@@ -487,6 +516,7 @@ void P_inner(X* x) {
 				  TS(x)->c = P_forward(x, 0, '"'); 
         });
         break;
+			*/
       /*
 			default:
 				op = *x->ip;

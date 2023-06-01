@@ -191,16 +191,6 @@ void test_dump_o() {
   dump_o(buf, TS(x));
   TEST_ASSERT_EQUAL_STRING("3.1415", buf);
 
-  PUSHC(x, 'a');
-  memset(buf, 0, sizeof buf);
-  dump_o(buf, TS(x));
-  TEST_ASSERT_EQUAL_STRING("a", buf);
-
-  PUSHS(x, "test string", strlen("test string"));
-  memset(buf, 0, sizeof buf);
-  dump_o(buf, TS(x));
-  TEST_ASSERT_EQUAL_STRING("\"test string\"", buf);
-
   RPUSH(x, "[11+]");
   memset(buf, 0, sizeof buf);
   dump_o(buf, TR(x));

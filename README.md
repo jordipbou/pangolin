@@ -50,11 +50,13 @@ Work in progress.
 
     l linear recursion ( [C] [P] [R1] [R2] -- <>)
     b binary recursion ( [C] [P] [R1] [R2] -- <> )
+
+		m map ( [A] [P] -- <P applied to each item in A> )
+		z zip ( [A] [B] [P] -- <P applied to each A and B pairs> )
+		f fold ( [A] [P] -- n )
   
-    'c char literal ( -- c )
     #nnn number literal ( -- nnn )
-    "s" string literal ( -- s )
-    [P] quotation literal ( -- [P] )
+    [P] array literal ( -- [P] )
     
 # External representation
 ## Numbers
