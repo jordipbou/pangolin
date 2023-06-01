@@ -3,10 +3,10 @@
 Embeddable C89 virtual machine.
 
 Features:
-  * ASCII based, easy writable/readable bytecode
-  * Header only, easy integrated in C/C++ programs
+  * Easily write/read bytecode with printable ASCII characters
+  * Header only library, easy integrated in C programs
   * Two typed stacks
-  * No garbage collector, memory is managed implicitly thru the stack
+  * No garbage collector, memory is managed thru the data stack
   * Array operations
   * Quotations
   * Easily extensible with C functions
@@ -57,6 +57,12 @@ Work in progress.
     [P] quotation literal ( -- [P] )
     
 # External representation
+## Numbers
+### Integers
+### Floating point
+## Arrays
+
+    "test string"
 
 ## Continuation
 

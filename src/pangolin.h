@@ -37,6 +37,7 @@ typedef struct _X {
 	I err;
   void (*k)(struct _X*);
   void (*e)(struct _X*);
+  void (*ex[26])(struct _X*);
 } X;
 
 typedef void (*FUNC)(X*);
@@ -72,7 +73,8 @@ void P_inner(X*);
 #define ERR_RSTACK_UNDERFLOW    -4
 #define ERR_DIVIDE_BY_ZERO			-5
 #define ERR_STRING_EXPECTED     -6
-#define ERR_EXIT								-7
+#define ERR_ALLOCATION          -7
+#define ERR_EXIT								-8
 
 I handle(X* x, I err) {
   ERROR(x) = err;
@@ -95,6 +97,8 @@ I handle(X* x, I err) {
 #define SE(x, b) ERR(x, TS(x)->t % STRING != 0, ERR_STRING_EXPECTED, b)
 
 #define DO(x, f) f(x); if (ERROR(x)) { return; }
+#define DO1(x, f, a) f(x, a); if (ERROR(x)) { return; }
+#define DO2(x, f, a, b) f(x, a, b); if (ERROR(x)) { return; }
 
 #define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
 #define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
@@ -231,6 +235,8 @@ void P_lt(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i < TS(x)->v
 void P_eq(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i == TS(x)->v.i; x->sp--; }); }
 void P_gt(X* x) { /* ( n n -- n ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i > TS(x)->v.i; x->sp--; }); }
 
+void P_and(X* x) { /* ( n n -- b ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i & TS(x)->v.i; x->sp--; }); }
+void P_or(X* x) { /* ( n n -- b ) */ UF2(x, { NS(x)->v.i = NS(x)->v.i | TS(x)->v.i; x->sp--; }); }
 void P_not(X* x) { /* ( n -- n ) */ UF1(x, { TS(x)->v.i = !TS(x)->v.i; }); }
 
 /* Stack operations */
@@ -310,6 +316,36 @@ void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
 		P_binrec(x, i, t, r1, r2);
 		CALL(x, r2, 1); P_inner(x);
 	}
+}
+
+/* Arrays */
+void P_map(X* x, B* q) {
+  OF1(x, {
+    B* b = (B*)TS(x)->v.i;
+    I i;
+  I l = TS(x)->c;
+    /* Let's assume I8 */
+    for (i = 0; i < l; i++) {
+      PUSH(x, b[i]);
+      CALL(x, q, 1); DO(x, P_inner);
+      b[i] = (B)POP(x);
+    }
+  });
+}
+
+void P_zip(X* x, B* q) {
+  OF2(x, {
+    B* a = (B*)NS(x)->v.i;
+    B* b = (B*)TS(x)->v.i;
+    I i;
+    I l = NS(x)->c;
+    for (i = 0; i < l; i++) {
+      PUSH(x, a[i]);
+      PUSH(x, b[i]);
+      CALL(x, q, 1); DO(x, P_inner);
+      a[i] = (B)POP(x);
+    }
+  });
 }
 
 /* Input/output */
@@ -410,6 +446,8 @@ void P_inner(X* x) {
 			case '<': P_lt(x); break;
 			case '=': P_eq(x); break;
 			case '>': P_gt(x); break;
+      case '&': DO(x, P_and); break;
+      case '|': DO(x, P_or); break;
 			case '!': P_not(x); break;
 			case 'd': P_dup(x); break;
 			case 's': P_swap(x); break;
@@ -439,6 +477,8 @@ void P_inner(X* x) {
 			case 'b': P_binrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
 			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
 			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+      case 'm': DO1(x, P_map, (B*)TO_R(x)->v.i); break;
+      case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
 			case '\'': OF1(x, { PUSH(x, *++x->ip); TS(x)->t *= CHAR; }); break;
 			case '"': 
 				OF1(x, {
