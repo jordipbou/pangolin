@@ -336,7 +336,7 @@ void P_map(X* x, B* q) {
   OF1(x, {
     B* b = (B*)TS(x)->v.i;
     I i;
-  I l = TS(x)->c;
+    I l = TS(x)->c;
     /* Let's assume I8 */
     for (i = 0; i < l; i++) {
       PUSH(x, b[i]);
@@ -358,6 +358,7 @@ void P_zip(X* x, B* q) {
       CALL(x, q, 1); DO(x, P_inner);
       a[i] = (B)POP(x);
     }
+    POP(x);
   });
 }
 

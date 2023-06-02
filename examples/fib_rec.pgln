@@ -1,2 +1,2 @@
-"Calculates the 36th number of the Fibonacci sequence"\
-#36[d2<][][1-d1-][+]b
+[Calculates the 36th number of the Fibonacci sequence]\
+#36[d#2<][][1-d1-][+]b
