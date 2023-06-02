@@ -112,7 +112,8 @@ void test_return_stack() {
   }
 
   j = (I)RPOP(x, 0);
-  TEST_ASSERT_EQUAL_INT(ERR_RSTACK_UNDERFLOW, ERROR(x));
+  
+  TEST_ASSERT_EQUAL_INT(0, j);
 }
 
 void test_return_stack_2() {
@@ -122,15 +123,6 @@ void test_return_stack_2() {
 
   TEST_ASSERT_EQUAL_INT(ERR_RSTACK_OVERFLOW, ERROR(x));
   TEST_ASSERT_EQUAL_INT(RMAX_DEPTH(x), RDEPTH(x));
-
-  ERROR(x) = ERR_OK;
-
-  while (!ERROR(x)) {
-    RPOP(x, 0);
-  }
-
-  TEST_ASSERT_EQUAL_INT(ERR_RSTACK_UNDERFLOW, ERROR(x));
-  TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
 }
 
 void test_pop_and_free() {
@@ -212,6 +204,35 @@ void test_dump_rstack() {
   TEST_ASSERT_EQUAL_STRING("11+] : ds : 7", buf);
 }
 
+void test_inner() {
+  B* b;
+  IP(x) = "   ";
+  
+  P_inner(x);
+  
+  TEST_ASSERT_EQUAL_INT(0, RP(x));
+  TEST_ASSERT_EQUAL_INT(0, IP(x));
+
+  b = "    ";
+  RPUSH(x, b);
+  RPUSH(x, 7);
+  TR(x)->t = INT;
+  IP(x) = "    ";
+  
+  P_inner(x);
+  
+  TEST_ASSERT_EQUAL_INT(2, RP(x));
+  TEST_ASSERT_EQUAL_INT(0, IP(x));
+
+  IP(x) = RPOP(x, 0);
+  TEST_ASSERT_EQUAL_PTR(b, IP(x));
+  
+  P_inner(x);
+  
+  TEST_ASSERT_EQUAL_INT(0, RP(x));
+  TEST_ASSERT_EQUAL_INT(0, IP(x));
+}
+
 int main() {
 	UNITY_BEGIN();
 
@@ -228,6 +249,8 @@ int main() {
 
   RUN_TEST(test_dump_o);
   RUN_TEST(test_dump_rstack);
+
+  RUN_TEST(test_inner);
   
 	return UNITY_END();
 }

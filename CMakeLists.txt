@@ -1,7 +1,7 @@
 ﻿cmake_minimum_required (VERSION 3.8)
 
 set(CMAKE_C_COMPILER "gcc")
-set(CMAKE_C_FLAGS "-ansi -pedantic -O3")
+set(CMAKE_C_FLAGS "-ansi -pedantic -O0")
 
 project(pangolin LANGUAGES C)
 

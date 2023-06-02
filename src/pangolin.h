@@ -141,22 +141,20 @@ I POP(X* x) {
 
 B* RPOP(X* x, I r) {
   O* o;
-  RUF1(x, {
-    while (RP(x) > r) {
-      o = TR(x);
-      if (o->t % RETURN == 0) {
-        B* b = (B*)o->v.i;
-        RP(x)--;
-        return b;
-      } else {
-        if (o->t % MANAGED == 0) {
-          Pfree((void*)o->v.i);
-        }
-        RP(x)--;
+  while (RP(x) > r) {
+    o = TR(x);
+    if (o->t % RETURN == 0) {
+      B* b = (B*)o->v.i;
+      RP(x)--;
+      return b;
+    } else {
+      if (o->t % MANAGED == 0) {
+        Pfree((void*)o->v.i);
       }
+      RP(x)--;
     }
-    return 0;
-  })
+  }
+  return 0;
 }
 
 #define CALL(x, d, t) if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { RPUSH(x, x->ip); } x->ip = d
@@ -171,7 +169,7 @@ X* init() {
 
 /* External representation */
 
-#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
+#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && *(op + i) != 10 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
 
 I dump_o(B* s, O* o) {
 	if (o->t % ARRAY == 0) {
@@ -193,7 +191,13 @@ I dump_o(B* s, O* o) {
 			}
 		}
 	}
-  else if (o->t % RETURN == 0) { I i, t = 1, n = 0; DUMP_CODE((B*)o->v.i); return n; }
+  else if (o->t % RETURN == 0) { 
+    I i, t = 1, n = 0; 
+    if (o->v.i != 0) {
+      DUMP_CODE((B*)o->v.i); 
+      return n; 
+    }
+  }
 	else if (o->t % INT == 0) { return sprintf(s, "%ld", o->v.i); } 
 	else if (o->t % FLOAT == 0) { return sprintf(s, "%g", o->v.f); }
 }
@@ -470,14 +474,13 @@ void P_inner(X* x) {
 	B buf[255];
 	B op;
 	I r = RP(x);
-  while (x->err == ERR_OK) {
+  while (IP(x) > 1 && x->err == ERR_OK) {
 		if (x->tr) {
 			memset(buf, 0, sizeof buf);
 			dump(buf, x);
-			printf("%s", buf);
+			printf("%s\n", buf);
 		}
-		switch (*x->ip) {
-			case '$': UF1(x, { x->tr = POP(x); }); break;
+		switch (*IP(x)) {
 			case 'q': x->err = ERR_EXIT; return; break;
       case '0': case '1': case '2': case'3': case '4':
       case '5': case '6': case '7': case '8': case '9':
@@ -513,8 +516,11 @@ void P_inner(X* x) {
 				break;
       case 0:
 			case ']':
+        /*
         IP(x) = RPOP(x, r);
         if (IP(x) == 0) { return; }
+        */
+        IP(x) = 0;
         break;
 			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
 			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
@@ -526,15 +532,14 @@ void P_inner(X* x) {
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
 			case 'f': DO1(x, P_fold, (B*)TO_R(x)->v.i); break;
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
-			/*
-			case '"': 
-				OF1(x, {
-				  PUSH(x, x->ip + 1); 
-				  TS(x)->t *= I8*ARRAY*STRING; 
-				  TS(x)->c = P_forward(x, 0, '"'); 
-        });
-        break;
-			*/
+      /* Pangolin internals */
+      case '`':
+        IP(x)++;
+        switch (*IP(x)) {
+          case 't': x->tr = 1 - x->tr; break;
+          case 'r': PUSH(x, RP(x)); break;
+        }
+      break;
       /*
 			default:
 				op = *x->ip;
@@ -543,7 +548,11 @@ void P_inner(X* x) {
 				}
       */
 		}
-		x->ip++;
+    if (IP(x) == 0) {
+      IP(x) = RPOP(x, r);
+      if (IP(x) == 0) { return; }
+    }
+    IP(x)++;
 	} 
 }
 
