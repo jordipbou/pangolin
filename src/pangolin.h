@@ -139,10 +139,10 @@ I POP(X* x) {
 
 #define RPUSH(x, v) ROF1(x, { RP(x)++; SETI(TR(x), RETURN, 0, (I)v); })
 
-B* RPOP(X* x) {
+B* RPOP(X* x, I r) {
   O* o;
   RUF1(x, {
-    while (RP(x) > 0) {
+    while (RP(x) > r) {
       o = TR(x);
       if (o->t % RETURN == 0) {
         B* b = (B*)o->v.i;
@@ -155,6 +155,7 @@ B* RPOP(X* x) {
         RP(x)--;
       }
     }
+    return 0;
   })
 }
 
@@ -213,11 +214,13 @@ I dump_stack(B* s, X* x, I nl) {
 
 I dump_rstack(B* s, X* x) {
   I i, j, t = 1, n = 0;
-  DUMP_CODE(x->ip);
-  for (j = RDEPTH(x) - 1; j >= 0; j--) {
-    if (RPK(x, j)->t % RETURN == 0) {
-      SEPARATOR; t = 1; DUMP_CODE((B*)RPK(x, j)->v.i);
-    }
+  if (IP(x)) {
+    DUMP_CODE(x->ip);
+  }
+  for (j = RDEPTH(x); j > 0; j--) {
+    SEPARATOR;
+    s += t = dump_o(s, RPK(x, j - 1));
+    n += t;
   }
 
   return n;
@@ -229,7 +232,7 @@ I dump(B* s, X* x) {
 
 	memset(r, 0, sizeof r);
 	n = dump_stack(r, x, 0);
-	s += t = sprintf(s, "%40s: ", r);
+	s += t = sprintf(s, "%20s: ", r);
 	s += n = dump_rstack(s, x);
 	t += n;
 
@@ -466,8 +469,8 @@ I P_forward(X* x, I o, I c) {
 void P_inner(X* x) {
 	B buf[255];
 	B op;
-	I r = x->rp;
-	while (*x->ip != 0 && x->err == ERR_OK) {
+	I r = RP(x);
+  while (x->err == ERR_OK) {
 		if (x->tr) {
 			memset(buf, 0, sizeof buf);
 			dump(buf, x);
@@ -500,7 +503,7 @@ void P_inner(X* x) {
       case 'o': P_over(x); break;
       /* TODO: Implement rot */
 			case '\\': POP(x); break;
-			case 'i': P_exec_i(x); break;
+			case 'i': DO(x, P_exec_i); break;
 			case '[': 
 				OF1(x, { 
 				  PUSH(x, IP(x) + 1); 
@@ -508,15 +511,10 @@ void P_inner(X* x) {
 				  TS(x)->c = P_forward(x, '[', ']'); 
         });
 				break;
-			case ']': 
-        if (RP(x) < r) { 
-          IP(x) = RPOP(x); 
-        } else { 
-          if (RP(x) < STACK_SIZE) { 
-            IP(x) = RPOP(x); 
-          } 
-          return; 
-        } 
+      case 0:
+			case ']':
+        IP(x) = RPOP(x, r);
+        if (IP(x) == 0) { return; }
         break;
 			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
 			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;

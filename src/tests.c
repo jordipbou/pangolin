@@ -106,12 +106,12 @@ void test_return_stack() {
   TEST_ASSERT_EQUAL_INT(RMAX_DEPTH(x) - 1, TR(x)->v.i);
   
   for (i = RMAX_DEPTH(x) - 1; RDEPTH(x) > 0; i--) {
-    j = (I)RPOP(x);
+    j = (I)RPOP(x, 0);
     TEST_ASSERT_EQUAL_INT(i, j);
     TEST_ASSERT_EQUAL_INT(0, ERROR(x)); 
   }
 
-  j = (I)RPOP(x);
+  j = (I)RPOP(x, 0);
   TEST_ASSERT_EQUAL_INT(ERR_RSTACK_UNDERFLOW, ERROR(x));
 }
 
@@ -126,7 +126,7 @@ void test_return_stack_2() {
   ERROR(x) = ERR_OK;
 
   while (!ERROR(x)) {
-    RPOP(x);
+    RPOP(x, 0);
   }
 
   TEST_ASSERT_EQUAL_INT(ERR_RSTACK_UNDERFLOW, ERROR(x));
@@ -155,7 +155,7 @@ void test_to_r() {
   TEST_ASSERT_EQUAL_INT(a, (void*)o->v.i);
   TEST_ASSERT_EQUAL_INT(0, DEPTH(x));
   TEST_ASSERT_EQUAL_INT(1, RDEPTH(x));
-  RPOP(x);
+  RPOP(x, 0);
   TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
   TEST_ASSERT_EQUAL_INT(0, allocated);
 }
@@ -173,10 +173,10 @@ void test_rpop() {
   PUSH(x, 13);
   TO_R(x);
   TEST_ASSERT_EQUAL_INT(5, RDEPTH(x));
-  i = RPOP(x);
+  i = RPOP(x, 0);
   TEST_ASSERT_EQUAL_PTR(s2, i);
   TEST_ASSERT_EQUAL_INT(3, RDEPTH(x));
-  i = RPOP(x);
+  i = RPOP(x, 0);
   TEST_ASSERT_EQUAL_PTR(s1, i);
   TEST_ASSERT_EQUAL_INT(0, RDEPTH(x));
 }
@@ -209,7 +209,7 @@ void test_dump_rstack() {
   RPUSH(x, "ds");
   memset(buf, 0, sizeof buf);
   dump_rstack(buf, x);
-  TEST_ASSERT_EQUAL_STRING("11+] : ds", buf);
+  TEST_ASSERT_EQUAL_STRING("11+] : ds : 7", buf);
 }
 
 int main() {
