@@ -332,6 +332,23 @@ void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
 }
 
 /* Arrays */
+void P_iota(X* x) {
+  OF1(x, {
+    I n = POP(x);
+    I i;
+    if (n < 256) {
+      B* b = Pmalloc(n);
+      if (b == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+      for (i = 0; i < n; i++) {
+        b[i] = i + 1;
+      }
+      PUSHM(x, b);
+      TS(x)->c = n;
+      TS(x)->t *= I8*ARRAY;
+    }
+  });
+}
+
 void P_map(X* x, B* q) {
   OF1(x, {
     B* b = (B*)TS(x)->v.i;
@@ -420,11 +437,11 @@ void P_number(X* x) {
 	char *end, *end2;
 	F f;
 	I i;
-	f = strtod(x->ip + 1, &end);
-	if (f == 0 && end == x->ip + 1) {
+  f = strtod(x->ip, &end);
+  if (f == 0 && end == x->ip) {
 		/* Conversion error */
 	} else {
-		i = strtol(x->ip + 1, &end2, 0);
+    i = strtol(x->ip, &end2, 0);
 		if (i == f && end == end2) {
 			PUSH(x, i);
 		} else {
@@ -459,9 +476,10 @@ void P_inner(X* x) {
 		switch (*x->ip) {
 			case '$': UF1(x, { x->tr = POP(x); }); break;
 			case 'q': x->err = ERR_EXIT; return; break;
-			case '0': PUSH(x, 0); break;
-			case '1': PUSH(x, 1); break;
-			case '#': P_number(x); break;
+      case '0': case '1': case '2': case'3': case '4':
+      case '5': case '6': case '7': case '8': case '9':
+        DO(x, P_number);
+        break;
       case 'k': DO(x, KEY); break;
       case 'e': DO(x, EMIT); break;
       case 'p': P_print(x); break;
@@ -505,6 +523,7 @@ void P_inner(X* x) {
 			case 'b': P_binrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
 			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
 			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+      case '#': DO(x, P_iota); break;
       case 'm': DO1(x, P_map, (B*)TO_R(x)->v.i); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
 			case 'f': DO1(x, P_fold, (B*)TO_R(x)->v.i); break;
