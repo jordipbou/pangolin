@@ -17,7 +17,7 @@ typedef char B;
 typedef intptr_t I;
 typedef double F;
 
-enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, ARRAY = 7, I8 = 11, I16 = 13, I32 = 17, I64 = 19, RETURN = 23 } T;
+enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, ARRAY = 7, I8 = 11, I16 = 13, I32 = 17, I64 = 19, F32 = 23, F64 = 29, OBJECT = 31, RETURN = 37 } T;
 
 typedef struct { I t; I c; union { I i; F f; } v; } O;
 
@@ -87,6 +87,8 @@ I handle(X* x, I err) {
 
 #define OF1(x, b) ERR(x, SP(x) == MAX_DEPTH(x), ERR_STACK_OVERFLOW, b)
 #define OF2(x, b) ERR(x, SP(x) >= MAX_DEPTH(x) - 1, ERR_STACK_OVERFLOW, b)
+#define OF3(x, b) ERR(x, SP(x) >= MAX_DEPTH(x) - 2, ERR_STACK_OVERFLOW, b)
+#define OF4(x, b) ERR(x, SP(x) >= MAX_DEPTH(x) - 3, ERR_STACK_OVERFLOW, b)
 #define UF1(x, b) ERR(x, SP(x) == 0, ERR_STACK_UNDERFLOW, b)
 #define UF2(x, b) ERR(x, SP(x) <= 1, ERR_STACK_UNDERFLOW, b)
 #define UF3(x, b) ERR(x, SP(x) <= 2, ERR_STACK_UNDERFLOW, b)
@@ -98,6 +100,8 @@ I handle(X* x, I err) {
 #define DO(x, f) f(x); if (ERROR(x)) { return; }
 #define DO1(x, f, a) f(x, a); if (ERROR(x)) { return; }
 #define DO2(x, f, a, b) f(x, a, b); if (ERROR(x)) { return; }
+#define DO3(x, f, a, b, c) f(x, a, b, c); if (ERROR(x)) { return; }
+#define DO4(x, f, a, b, c, d) f(x, a, b, c, d); if (ERROR(x)) { return; }
 
 #define PUSH(x, v) OF1(x, { SP(x)++; SETI(TS(x), INT, 0, (I)v); })
 #define PUSHF(x, v) OF1(x, { SP(x)++; SETF(TS(x), FLOAT, 0, (F)v); })
@@ -107,7 +111,7 @@ O* TO_R(X* x) {
   O* s, * d;
   UF1(x, { 
     ROF1(x, {
-      x->rp++;
+      RP(x)++;
       s = TS(x);
       d = TR(x);
       d->t = s->t;
@@ -157,7 +161,7 @@ B* RPOP(X* x, I r) {
   return 0;
 }
 
-#define CALL(x, d, t) if (t || !(*(x->ip + 1) == 0 || *(x->ip + 1) == ']')) { RPUSH(x, x->ip); } x->ip = d
+#define CALL(x, d) if (IP(x) != 0 && *(IP(x) + 1) != 0 && *(IP(x) + 1) != ']') { RPUSH(x, IP(x)); } IP(x) = d
 
 X* init() {
 	X* x = malloc(sizeof(X));
@@ -238,7 +242,9 @@ I dump(B* s, X* x) {
 	n = dump_stack(r, x, 0);
 	s += t = sprintf(s, "%20s: ", r);
 	s += n = dump_rstack(s, x);
-	t += n;
+	n += t;
+  s += t = sprintf(s, "<%ld>", RP(x));
+  n += t;
 
 	return t;
 }
@@ -298,44 +304,55 @@ void P_over(X* x) { /* ( a b -- a b a ) */
 /* TODO: Implement and rot */
 
 /* Execution */
-void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)TO_R(x)->v.i; CALL(x, q - 1, 0); }
+void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)TO_R(x)->v.i; CALL(x, q - 1); }
 
 /* Conditional and looping operations */
-void P_ifthen(X* x, I c, B* t, B* e) { /* ( flag [P] [Q] -- P|Q ) */ CALL(x, (c ? t : e) - 1, 0); }
+void P_ifthen(X* x, I c, B* t, B* e) { /* ( flag [P] [Q] -- P|Q ) */ CALL(x, (c ? t : e) - 1); }
 void P_times(X* x, I t, B* q) { /* ( n [P] -- %n times P% ) */ 
 	for(;t > 0; t--) { 
-		CALL(x, q, 1); DO(x, P_inner);
+		CALL(x, q); DO(x, P_inner);
 	} 
 }
 void P_while(X* x, B* c, B* q) { /* ( [C] [P] -- %P while C% ) */
 	do { 
-		CALL(x, c, 1); DO(x, P_inner);
+		CALL(x, c); DO(x, P_inner);
 		if (!POP(x)) { return; } 
-		CALL(x, q, 1); DO(x, P_inner);
+		CALL(x, q); DO(x, P_inner);
 	} while(1); 
 }
 
 /* Recursion operations */
 void P_linrec(X* x, B* i, B* t, B* r1, B* r2) {
-	CALL(x, i, 1); DO(x, P_inner);
-	if (POP(x)) { CALL(x, t, 1); DO(x, P_inner); }
+	CALL(x, i); DO(x, P_inner);
+	if (POP(x)) { CALL(x, t); DO(x, P_inner); }
 	else {
-		CALL(x, r1, 1); DO(x, P_inner);
+		CALL(x, r1); DO(x, P_inner);
 		P_linrec(x, i, t, r1, r2);
-		CALL(x, r2, 1); DO(x, P_inner);
+		CALL(x, r2); DO(x, P_inner);
 	}
 }
 
-void P_binrec(X* x, B* i, B* t, B* r1, B* r2) {
-	CALL(x, i, 1); P_inner(x);
-	if (POP(x)) { CALL(x, t, 1); P_inner(x); } 
+void P_binrec_r(X* x, B* c, B* t, B* r1, B* r2) {
+	CALL(x, c); DO(x, P_inner);
+	if (POP(x)) { CALL(x, t); DO(x, P_inner); } 
 	else {
-		CALL(x, r1, 1); P_inner(x);
-		P_binrec(x, i, t, r1, r2);
-		P_swap(x);
-		P_binrec(x, i, t, r1, r2);
-		CALL(x, r2, 1); P_inner(x);
+		CALL(x, r1); DO(x, P_inner);
+		DO4(x, P_binrec_r, c, t, r1, r2);
+		DO(x, P_swap);
+		DO4(x, P_binrec_r, c, t, r1, r2);
+		CALL(x, r2); DO(x, P_inner);
 	}
+}
+
+void P_binrec(X* x) {
+  OF4(x, {
+    I r = RP(x);
+    B* r2 = (B*)TO_R(x)->v.i;
+    B* r1 = (B*)TO_R(x)->v.i;
+    B* t = (B*)TO_R(x)->v.i;
+    B* c = (B*)TO_R(x)->v.i;
+    DO4(x, P_binrec_r, c, t, r1, r2);
+  });
 }
 
 /* Arrays */
@@ -356,15 +373,18 @@ void P_iota(X* x) {
   });
 }
 
-void P_map(X* x, B* q) {
-  OF1(x, {
+void P_map(X* x) {
+  OF2(x, {
+    I r = RP(x);
+    B* q = (B*)TO_R(x)->v.i;
     B* b = (B*)TS(x)->v.i;
     I i;
     I l = TS(x)->c;
     /* Let's assume I8 */
     for (i = 0; i < l; i++) {
       PUSH(x, b[i]);
-      CALL(x, q, 1); DO(x, P_inner);
+      CALL(x, q); DO(x, P_inner);
+      /* TODO: If result is not an int, it can not be saved. Should creation of differen array be automatic or not? */
       b[i] = (B)POP(x);
     }
   });
@@ -379,7 +399,7 @@ void P_zip(X* x, B* q) {
     for (i = 0; i < l; i++) {
       PUSH(x, a[i]);
       PUSH(x, b[i]);
-      CALL(x, q, 1); DO(x, P_inner);
+      CALL(x, q); DO(x, P_inner);
       a[i] = (B)POP(x);
     }
     POP(x);
@@ -394,7 +414,7 @@ void P_fold(X* x, B* q) {
 		PUSH(x, a[0]);
 		for (i = 1; i < o->c; i++) {
 			PUSH(x, a[i]);
-			CALL(x, q, 1); DO(x, P_inner);
+			CALL(x, q); DO(x, P_inner);
 		}
 		DO(x, P_swap);
 		POP(x);
@@ -474,7 +494,7 @@ void P_inner(X* x) {
 	B buf[255];
 	B op;
 	I r = RP(x);
-  while (IP(x) > 1 && x->err == ERR_OK) {
+  while (IP(x) && x->err == ERR_OK) {
 		if (x->tr) {
 			memset(buf, 0, sizeof buf);
 			dump(buf, x);
@@ -516,19 +536,15 @@ void P_inner(X* x) {
 				break;
       case 0:
 			case ']':
-        /*
-        IP(x) = RPOP(x, r);
-        if (IP(x) == 0) { return; }
-        */
         IP(x) = 0;
         break;
 			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
 			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
-			case 'b': P_binrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+      case 'b': DO(x, P_binrec); break;
 			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
 			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
       case '#': DO(x, P_iota); break;
-      case 'm': DO1(x, P_map, (B*)TO_R(x)->v.i); break;
+      case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
 			case 'f': DO1(x, P_fold, (B*)TO_R(x)->v.i); break;
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
@@ -550,7 +566,14 @@ void P_inner(X* x) {
 		}
     if (IP(x) == 0) {
       IP(x) = RPOP(x, r);
-      if (IP(x) == 0) { return; }
+      if (IP(x) == 0) { 
+        if (x->tr) {
+			    memset(buf, 0, sizeof buf);
+			    dump(buf, x);
+			    printf("%s\n", buf);
+		    }
+        return; 
+      }
     }
     IP(x)++;
 	} 
