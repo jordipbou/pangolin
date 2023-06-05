@@ -375,7 +375,6 @@ void P_iota(X* x) {
 
 void P_map(X* x) {
   OF2(x, {
-    I r = RP(x);
     B* q = (B*)TO_R(x)->v.i;
     B* b = (B*)TS(x)->v.i;
     I i;
@@ -406,9 +405,11 @@ void P_zip(X* x, B* q) {
   });
 }
 
-void P_fold(X* x, B* q) {
-	OF1(x, {
+void P_fold(X* x) {
+	OF2(x, {
+		B* q = (B*)TO_R(x)->v.i;
 		O* o = TS(x);
+		/* TODO: Just accepting I8 array right now */
 		B* a = (B*)o->v.i;
 		I i;
 		PUSH(x, a[0]);
@@ -418,6 +419,36 @@ void P_fold(X* x, B* q) {
 		}
 		DO(x, P_swap);
 		POP(x);
+	});
+}
+
+/* TODO:
+void P_right_fold(X* x) {
+}
+*/
+
+void P_filter(X* x) {
+	UF2(x, {
+		O* f = TO_R(x);
+		O* a = TO_R(x);
+		B* r;
+		I c = 0;
+		I i;
+		I j;
+		for (i = 0; i < f->c; i++) {
+			c += ((B*)f->v.i)[i];
+		}
+		/* Create a new array with c elements */
+		if ((r = Pmalloc(c)) == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+		PUSHM(x, r);
+		TS(x)->t *= I8*ARRAY;
+		TS(x)->c = c;
+		j = 0;
+		for (i = 0; i < a->c; i++) {
+			if (((B*)f->v.i)[i] == 1) {
+				r[j++] = ((B*)a->v.i)[i];
+			}
+		}
 	});
 }
 
@@ -546,7 +577,9 @@ void P_inner(X* x) {
       case '#': DO(x, P_iota); break;
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case 'f': DO1(x, P_fold, (B*)TO_R(x)->v.i); break;
+			case '{': DO(x, P_fold); break;
+			/* TODO: case '}': DO(x, P_right_fold); break; */
+			case 'f': DO(x, P_filter); break;
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       /* Pangolin internals */
       case '`':
