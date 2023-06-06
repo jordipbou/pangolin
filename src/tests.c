@@ -18,6 +18,7 @@ void setUp() {
 	x = init();
   SP(x) = 0;
   RP(x) = 0;
+	TRACE(x) = 0;
   allocated = 0;
 }
 
@@ -233,6 +234,33 @@ void test_inner() {
   TEST_ASSERT_EQUAL_INT(0, IP(x));
 }
 
+void test_dup_array() {
+	IP(x) = "13#d";
+
+	DO(x, P_inner);
+
+	dump_stack(buf, x, 0);
+	TEST_ASSERT_EQUAL_STRING("[0 1 2 3 4 5 6 7 8 9 10 11 12 ] [0 1 2 3 4 5 6 7 8 9 10 11 12 ] ", buf);
+}
+
+void test_over_array() {
+	IP(x) = "5#3#o";
+
+	DO(x, P_inner);
+
+	dump_stack(buf, x, 0);
+	TEST_ASSERT_EQUAL_STRING("[0 1 2 3 4 ] [0 1 2 ] [0 1 2 3 4 ] ", buf);
+}
+
+void test_fold() {
+	IP(x) = "5#[1+]m[*]{";
+
+	DO(x, P_inner);
+
+	dump_stack(buf, x, 0);
+	TEST_ASSERT_EQUAL_STRING("120 ", buf);
+}
+
 int main() {
 	UNITY_BEGIN();
 
@@ -251,6 +279,11 @@ int main() {
   RUN_TEST(test_dump_rstack);
 
   RUN_TEST(test_inner);
+
+	RUN_TEST(test_dup_array);
+	RUN_TEST(test_over_array);
+
+	RUN_TEST(test_fold);
   
 	return UNITY_END();
 }

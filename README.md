@@ -15,8 +15,11 @@ Work in progress.
 
 # Bytecode specification
 
+		q exit
+
     k key ( <gets char> -- c )
     e emit ( n -- <prints char> )
+		n number display ( n -- <prints number representation> )
     r read ( <k until enter> -- s )
     p print ( s -- <prints string> )
     
@@ -40,18 +43,19 @@ Work in progress.
     o over ( i2 i1 -- i2 i1 i2 )
     @ rot ( i3 i2 i1 -- i1 i3 i2 )
 
+    i exec ( [P] -- P )
+    x      ( [P] -- [P] P )
+
     ? ifelse ( b [P] [Q] -- <P if b else Q> )
     
     t times ( n [P] -- <do P n times> )
     w while ( [C] [P] -- <while C do P> )
 
-    i exec ( [P] -- P )
-    x      ( [P] -- [P] P )
-
     l linear recursion ( [C] [P] [R1] [R2] -- <>)
     b binary recursion ( [C] [P] [R1] [R2] -- <> )
 
     # iota ( n -- <array from 1 to n> )
+		$ shape ( ? )
 		m map ( [A] [P] -- <P applied to each item in A> )
 		z zip ( [A] [B] [P] -- <P applied to each A and B pairs> )
 		{ fold ( [A] [P] -- n )

@@ -47,7 +47,8 @@ typedef void (*FUNC)(X*);
 
 #define ERROR(x) (x->err)
 
-#define IP(X) (x->ip)
+#define IP(x) (x->ip)
+#define TRACE(x) (x->tr)
 
 #define SP(x) (x->sp)
 #define DEPTH(x) SP(x)
@@ -56,6 +57,7 @@ typedef void (*FUNC)(X*);
 #define PK(x, i) (&x->s[i])
 #define TS(x) (PK(x, SP(x) - 1))
 #define NS(x)	(PK(x, SP(x) - 2))
+#define NNS(x) (PK(x, SP(x) - 3))
 
 #define RP(x) (x->rp)
 #define RDEPTH(x) RP(x)
@@ -193,6 +195,13 @@ I dump_o(B* s, O* o) {
 				s += t = sprintf(s, "]"); n += t;
 				return n;
 			}
+		} else if (o->t % I64 == 0) {
+			s += t = sprintf(s, "["); n += t;
+			for (i = 0; i < o->c; i++) {
+				s += t = sprintf(s, "%ld ", ((I*)o->v.i)[i]); n += t;
+			}
+			s += t = sprintf(s, "]"); n += t;
+			return n;
 		}
 	}
   else if (o->t % RETURN == 0) { 
@@ -240,7 +249,7 @@ I dump(B* s, X* x) {
 
 	memset(r, 0, sizeof r);
 	n = dump_stack(r, x, 0);
-	s += t = sprintf(s, "%20s: ", r);
+	s += t = sprintf(s, "%40s: ", r);
 	s += n = dump_rstack(s, x);
 	n += t;
   s += t = sprintf(s, "<%ld>", RP(x));
@@ -280,7 +289,7 @@ void P_dup(X* x) { /* ( a -- a a ) */
 	      PUSH(x, a);
 	      TS(x)->t = NS(x)->t % MANAGED == 0 ? NS(x)->t : NS(x)->t * MANAGED;
 	      TS(x)->c = NS(x)->c;
-	      strncpy((B*)TS(x)->v.i, (B*)NS(x)->v.i, NS(x)->c * sz);
+	      memcpy((B*)TS(x)->v.i, (B*)NS(x)->v.i, NS(x)->c * sz);
 	    } else {
 	      I i = TS(x)->v.i; PUSH(x, i); TS(x)->t = NS(x)->t; TS(x)->c = NS(x)->c;
 	    }
@@ -294,14 +303,33 @@ void P_swap(X* x) { /* ( a b -- b a ) */
 	  t = TS(x)->c; TS(x)->c = NS(x)->c; NS(x)->c = t;
   });
 }
+void P_rot(X* x) { /* ( a b c -- c a b ) */
+	UF3(x, {
+		I t = TS(x)->v.i; TS(x)->v.i = NNS(x)->v.i; NNS(x)->v.i = NS(x)->v.i; NS(x)->v.i = t;
+		t = TS(x)->t; TS(x)->t = NNS(x)->t; NNS(x)->t = NS(x)->t; NS(x)->t = t;
+		t = TS(x)->c; TS(x)->c = NNS(x)->c; NNS(x)->c = NS(x)->c; NS(x)->c = t;
+	});
+}
+
 void P_over(X* x) { /* ( a b -- a b a ) */
   UF2(x, {
-    /* TODO: Arrays must be cloned !! */
-    I i = NS(x)->v.i;
-    PUSH(x, i);
+		if (NS(x)->t % ARRAY == 0) {
+			/* Easier done this way to just clone on dup */
+			DO(x, P_swap);
+			DO(x, P_dup);
+			DO(x, P_rot);
+			DO(x, P_rot);
+		} else if (NS(x)->t % INT == 0) {
+			I i = NS(x)->v.i;
+	    PUSH(x, i);
+			TS(x)->t = NNS(x)->t;
+		} else if (NS(x)->t % FLOAT == 0) {
+			F f = NS(x)->v.f;
+			PUSHF(x, f);
+			TS(x)->t = NNS(x)->t;
+		}
   })
 }
-/* TODO: Implement and rot */
 
 /* Execution */
 void P_exec_i(X* x) { /* ( [P] -- P ) */ B* q = (B*)TO_R(x)->v.i; CALL(x, q - 1); }
@@ -360,48 +388,88 @@ void P_iota(X* x) {
   OF1(x, {
     I n = POP(x);
     I i;
-    if (n < 256) {
-      B* b = Pmalloc(n);
+    /* if (n < 256) { */
+      I* b = Pmalloc(n*sizeof(I));
       if (b == 0) { ERROR(x) = ERR_ALLOCATION; return; }
       for (i = 0; i < n; i++) {
-        b[i] = i + 1;
+        b[i] = i;
       }
       PUSHM(x, b);
       TS(x)->c = n;
-      TS(x)->t *= I8*ARRAY;
-    }
+      TS(x)->t *= I64*ARRAY;
+    /* } */
   });
+}
+
+void P_shape(X* x) {
+	UF2(x, {
+		/* TODO: Should work with different arguments !!! */
+		I s = POP(x);
+		I n = POP(x);
+		I* a = Pmalloc(s*sizeof(I));
+		I i;
+		if (a == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+		for (i = 0; i < s; i++) {
+			a[i] = n;
+		}
+		PUSHM(x, a);
+		TS(x)->t *= I64*ARRAY;
+		TS(x)->c = s;
+	});
 }
 
 void P_map(X* x) {
   OF2(x, {
     B* q = (B*)TO_R(x)->v.i;
-    B* b = (B*)TS(x)->v.i;
     I i;
     I l = TS(x)->c;
-    /* Let's assume I8 */
-    for (i = 0; i < l; i++) {
-      PUSH(x, b[i]);
-      CALL(x, q); DO(x, P_inner);
-      /* TODO: If result is not an int, it can not be saved. Should creation of differen array be automatic or not? */
-      b[i] = (B)POP(x);
-    }
+		if (TS(x)->t % I8 == 0) {
+	    B* b = (B*)TS(x)->v.i;
+	    /* Let's assume I8 */
+	    for (i = 0; i < l; i++) {
+	      PUSH(x, b[i]);
+	      CALL(x, q); DO(x, P_inner);
+	      /* TODO: If result is not an int, it can not be saved. Should creation of differen array be automatic or not? */
+	      b[i] = (B)POP(x);
+	    }
+		} else if (TS(x)->t % I64 == 0) {
+	    I* b = (I*)TS(x)->v.i;
+	    /* Let's assume I8 */
+	    for (i = 0; i < l; i++) {
+	      PUSH(x, b[i]);
+	      CALL(x, q); DO(x, P_inner);
+	      /* TODO: If result is not an int, it can not be saved. Should creation of differen array be automatic or not? */
+	      b[i] = POP(x);
+	    }
+		}
   });
 }
 
 void P_zip(X* x, B* q) {
   OF2(x, {
-    B* a = (B*)NS(x)->v.i;
-    B* b = (B*)TS(x)->v.i;
     I i;
     I l = NS(x)->c;
-    for (i = 0; i < l; i++) {
-      PUSH(x, a[i]);
-      PUSH(x, b[i]);
-      CALL(x, q); DO(x, P_inner);
-      a[i] = (B)POP(x);
-    }
-    POP(x);
+		if (TS(x)->t % I8 == 0 && NS(x)->t % I8 == 0) {
+			B* a = (B*)NS(x)->v.i;
+    	B* b = (B*)TS(x)->v.i;
+    	for (i = 0; i < l; i++) {
+    	  PUSH(x, a[i]);
+    	  PUSH(x, b[i]);
+    	  CALL(x, q); DO(x, P_inner);
+    	  a[i] = (B)POP(x);
+    	}
+    	POP(x);
+		} else if (TS(x)->t % I64 == 0 && NS(x)->t % I64 == 0) {
+			I* a = (I*)NS(x)->v.i;
+    	I* b = (I*)TS(x)->v.i;
+    	for (i = 0; i < l; i++) {
+    	  PUSH(x, a[i]);
+    	  PUSH(x, b[i]);
+    	  CALL(x, q); DO(x, P_inner);
+    	  a[i] = POP(x);
+    	}
+    	POP(x);
+		}
   });
 }
 
@@ -409,16 +477,26 @@ void P_fold(X* x) {
 	OF2(x, {
 		B* q = (B*)TO_R(x)->v.i;
 		O* o = TS(x);
-		/* TODO: Just accepting I8 array right now */
-		B* a = (B*)o->v.i;
 		I i;
-		PUSH(x, a[0]);
-		for (i = 1; i < o->c; i++) {
-			PUSH(x, a[i]);
-			CALL(x, q); DO(x, P_inner);
+		if (o->t % I8 == 0) {
+			B* a = (B*)o->v.i;
+			PUSH(x, a[0]);
+			for (i = 1; i < o->c; i++) {
+				PUSH(x, a[i]);
+				CALL(x, q); DO(x, P_inner);
+			}
+			DO(x, P_swap);
+			POP(x);
+		} else if (o->t % I64 == 0) {
+			I* a = (I*)o->v.i;
+			PUSH(x, a[0]);
+			for (i = 1; i < o->c; i++) {
+				PUSH(x, a[i]);
+				CALL(x, q); DO(x, P_inner);
+			}
+			DO(x, P_swap);
+			POP(x);
 		}
-		DO(x, P_swap);
-		POP(x);
 	});
 }
 
@@ -431,22 +509,38 @@ void P_filter(X* x) {
 	UF2(x, {
 		O* f = TO_R(x);
 		O* a = TO_R(x);
-		B* r;
 		I c = 0;
 		I i;
 		I j;
+		/* TODO: It's only accepting I64 arrays for filterer */
 		for (i = 0; i < f->c; i++) {
-			c += ((B*)f->v.i)[i];
+			c += ((I*)f->v.i)[i];
 		}
-		/* Create a new array with c elements */
-		if ((r = Pmalloc(c)) == 0) { ERROR(x) = ERR_ALLOCATION; return; }
-		PUSHM(x, r);
-		TS(x)->t *= I8*ARRAY;
-		TS(x)->c = c;
-		j = 0;
-		for (i = 0; i < a->c; i++) {
-			if (((B*)f->v.i)[i] == 1) {
-				r[j++] = ((B*)a->v.i)[i];
+		if (a->t % I8 == 0) {
+			B* r;
+			/* Create a new array with c elements */
+			if ((r = Pmalloc(c)) == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+			PUSHM(x, r);
+			TS(x)->t *= I8*ARRAY;
+			TS(x)->c = c;
+			j = 0;
+			for (i = 0; i < a->c; i++) {
+				if (((I*)f->v.i)[i] == 1) {
+					r[j++] = ((B*)a->v.i)[i];
+				}
+			}
+		} else if (a->t % I64 == 0) {
+			I* r;
+			/* Create a new array with c elements */
+			if ((r = Pmalloc(c*sizeof(I))) == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+			PUSHM(x, r);
+			TS(x)->t *= I64*ARRAY;
+			TS(x)->c = c;
+			j = 0;
+			for (i = 0; i < a->c; i++) {
+				if (((I*)f->v.i)[i] == 1) {
+					r[j++] = ((I*)a->v.i)[i];
+				}
 			}
 		}
 	});
@@ -488,6 +582,21 @@ void P_read(X* x) {
       }
     } while(1);
   });
+}
+
+void P_print_object(X* x) {
+	B buf[255];
+	I sz;
+	I i;
+	memset(buf, 0, sizeof buf);
+	UF1(x, {
+		sz = dump_o(buf, TS(x));
+		for (i = 0; i < sz; i++) {
+			PUSH(x, buf[i]);
+			EMIT(x);
+		}
+		POP(x);
+	});
 }
 
 /* Parsing */
@@ -533,31 +642,57 @@ void P_inner(X* x) {
 		}
 		switch (*IP(x)) {
 			case 'q': x->err = ERR_EXIT; return; break;
+			/* INPUT/OUTPUT */
+      case 'k': DO(x, KEY); break;
+      case 'e': DO(x, EMIT); break;
+			case '.': DO(x, P_print_object); break;
+      case 'p': DO(x, P_print); break;
+      case 'r': DO(x, P_read); break;
+			/* ARITHMETICS */
+			case '+': DO(x, P_add); break;
+			case '-': DO(x, P_sub); break;
+			case '*': DO(x, P_mul); break;
+			case '/': DO(x, P_div); break;
+			case '%': DO(x, P_mod); break;
+			/* COMPARISONS */
+			case '<': DO(x, P_lt); break;
+			case '=': DO(x, P_eq); break;
+			case '>': DO(x, P_gt); break;
+			/* BITWISE OPERATORS */
+      case '&': DO(x, P_and); break;
+      case '|': DO(x, P_or); break;
+			case '!': DO(x, P_not); break;
+			/* STACK OPERATORS */
+			case '\\': POP(x); break;
+			case 'd': DO(x, P_dup); break;
+			case 's': DO(x, P_swap); break;
+      case '@': DO(x, P_rot); break;
+      case 'o': DO(x, P_over); break;
+			/* EXECUTION */
+			case 'i': DO(x, P_exec_i); break;
+			/* TODO: case 'x': DO (x, P_exec_x); break; */
+			/* CONDITIONAL */
+			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			/* LOOPS */
+			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
+			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+			/* RECURSION */
+			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
+      case 'b': DO(x, P_binrec); break;
+			/* ARRAYS */
+      case '#': DO(x, P_iota); break;
+			case '$': DO(x, P_shape); break;
+      case 'm': DO(x, P_map); break;
+      case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
+			case '{': DO(x, P_fold); break;
+			/* TODO: case '}': DO(x, P_right_fold); break; */
+			case 'f': DO(x, P_filter); break;
+			/* LITERALS */
+			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       case '0': case '1': case '2': case'3': case '4':
       case '5': case '6': case '7': case '8': case '9':
         DO(x, P_number);
         break;
-      case 'k': DO(x, KEY); break;
-      case 'e': DO(x, EMIT); break;
-      case 'p': P_print(x); break;
-      case 'r': P_read(x); break;
-			case '+': P_add(x); break;
-			case '-': P_sub(x); break;
-			case '*': P_mul(x); break;
-			case '/': P_div(x); break;
-			case '%': P_mod(x); break;
-			case '<': P_lt(x); break;
-			case '=': P_eq(x); break;
-			case '>': P_gt(x); break;
-      case '&': DO(x, P_and); break;
-      case '|': DO(x, P_or); break;
-			case '!': P_not(x); break;
-			case 'd': P_dup(x); break;
-			case 's': P_swap(x); break;
-      case 'o': P_over(x); break;
-      /* TODO: Implement rot */
-			case '\\': POP(x); break;
-			case 'i': DO(x, P_exec_i); break;
 			case '[': 
 				OF1(x, { 
 				  PUSH(x, IP(x) + 1); 
@@ -569,18 +704,6 @@ void P_inner(X* x) {
 			case ']':
         IP(x) = 0;
         break;
-			case '?': P_ifthen(x, POP(x), (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
-			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
-      case 'b': DO(x, P_binrec); break;
-			case 't': P_times(x, POP(x), (B*)TO_R(x)->v.i); break;
-			case 'w': P_while(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
-      case '#': DO(x, P_iota); break;
-      case 'm': DO(x, P_map); break;
-      case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '{': DO(x, P_fold); break;
-			/* TODO: case '}': DO(x, P_right_fold); break; */
-			case 'f': DO(x, P_filter); break;
-			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       /* Pangolin internals */
       case '`':
         IP(x)++;
