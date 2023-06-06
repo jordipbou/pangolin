@@ -58,12 +58,12 @@ Work in progress.
 		$ shape ( ? )
 		m map ( [A] [P] -- <P applied to each item in A> )
 		z zip ( [A] [B] [P] -- <P applied to each A and B pairs> )
-		{ fold ( [A] [P] -- n )
+		{ left fold ( [A] [P] -- n )
 		} right fold ( [A] [P] -- n )
 		f filter ( [A] [P] -- <array with only the items that pass predicate P> )
  
     'c character literal ( -- c )
-    #nnn number literal ( -- nnn )
+    nnn number literal ( -- nnn )
     [P] array literal ( -- [P] )
     
 # External representation

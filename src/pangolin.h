@@ -473,37 +473,47 @@ void P_zip(X* x, B* q) {
   });
 }
 
-void P_fold(X* x) {
+void P_left_fold(X* x) {
 	OF2(x, {
 		B* q = (B*)TO_R(x)->v.i;
-		O* o = TS(x);
+		O* o = TO_R(x);
 		I i;
 		if (o->t % I8 == 0) {
 			B* a = (B*)o->v.i;
-			PUSH(x, a[0]);
-			for (i = 1; i < o->c; i++) {
+			for (i = 0; i < o->c; i++) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
-			DO(x, P_swap);
-			POP(x);
 		} else if (o->t % I64 == 0) {
 			I* a = (I*)o->v.i;
-			PUSH(x, a[0]);
-			for (i = 1; i < o->c; i++) {
+			for (i = 0; i < o->c; i++) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
-			DO(x, P_swap);
-			POP(x);
 		}
 	});
 }
 
-/* TODO:
 void P_right_fold(X* x) {
+	OF2(x, {
+		B* q = (B*)TO_R(x)->v.i;
+		O* o = TO_R(x);
+		I i;
+		if (o->t % I8 == 0) {
+			B* a = (B*)o->v.i;
+			for (i = o->c - 1; i >= 0; i--) {
+				PUSH(x, a[i]);
+				CALL(x, q); DO(x, P_inner);
+			}
+		} else if (o->t % I64 == 0) {
+			I* a = (I*)o->v.i;
+			for (i = o->c - 1; i >= 0; i--) {
+				PUSH(x, a[i]);
+				CALL(x, q); DO(x, P_inner);
+			}
+		}
+	});
 }
-*/
 
 void P_filter(X* x) {
 	UF2(x, {
@@ -684,8 +694,8 @@ void P_inner(X* x) {
 			case '$': DO(x, P_shape); break;
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '{': DO(x, P_fold); break;
-			/* TODO: case '}': DO(x, P_right_fold); break; */
+			case '{': DO(x, P_left_fold); break;
+			case '}': DO(x, P_right_fold); break;
 			case 'f': DO(x, P_filter); break;
 			/* LITERALS */
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
