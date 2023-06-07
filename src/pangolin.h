@@ -384,20 +384,17 @@ void P_binrec(X* x) {
 }
 
 /* Arrays */
-void P_iota(X* x) {
+void P_iota(X* x, I s) {
   OF1(x, {
     I n = POP(x);
     I i;
-    /* if (n < 256) { */
-      I* b = Pmalloc(n*sizeof(I));
-      if (b == 0) { ERROR(x) = ERR_ALLOCATION; return; }
-      for (i = 0; i < n; i++) {
-        b[i] = i;
-      }
-      PUSHM(x, b);
-      TS(x)->c = n;
-      TS(x)->t *= I64*ARRAY;
-    /* } */
+    I* b = Pmalloc(n*sizeof(I));
+    if (b == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+    for (i = s; i < (n + s); i++) {        b[i - s] = i;
+    }
+    PUSHM(x, b);
+    TS(x)->c = n;
+    TS(x)->t *= I64*ARRAY;
   });
 }
 
@@ -694,21 +691,34 @@ void P_inner(X* x) {
 			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
       case 'b': DO(x, P_binrec); break;
 			/* ARRAYS */
-      case '#': DO(x, P_iota); break;
+      case '#': 
+        if (*(IP(x) + 1) == '.') {
+          IP(x)++;
+          DO1(x, P_iota, 1);
+        } else {
+          DO1(x, P_iota, 0);
+        }
+        break;
 			case '$': DO(x, P_shape); break;
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '{': DO1(x, P_left_fold, 0); break;
-			case '}': DO1(x, P_right_fold, 0); break;
+			case '{': 
+        if (*(IP(x) + 1) == '.') {
+          IP(x)++;
+          DO1(x, P_left_fold, 1);
+        } else {
+          DO1(x, P_left_fold, 0); 
+        }
+        break;
+			case '}':
+        if (*(IP(x) + 1) == '.') {
+          IP(x)++;
+          DO1(x, P_right_fold, 1);
+        } else {
+          DO1(x, P_right_fold, 0); 
+        }
+        break;
 			case 'f': DO(x, P_filter); break;
-			/* VARIATIONS WITH ONE PARAMETER */
-			case '.':
-				IP(x)++;
-				switch (*IP(x)) {
-					case '{': DO1(x, P_left_fold, 1); break;
-					case '}': DO1(x, P_right_fold, 1); break;
-				}
-				break;
 			/* LITERALS */
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       case '0': case '1': case '2': case'3': case '4':
