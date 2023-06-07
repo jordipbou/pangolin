@@ -65,6 +65,9 @@ Work in progress.
 		} right fold ( [A] [P] -- n )
 		.} right fold with initial argument
 		f filter ( [A] [P] -- <array with only the items that pass predicate P> )
+    ; append ( a b -- [a... b...] )
+    ( drop ( [A] n -- <[A] without the first n items> )
+    ) take ( [A] n -- <first n items of A> )
  
     'c character literal ( -- c )
     nnn number literal ( -- nnn )
