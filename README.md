@@ -4,7 +4,9 @@ Embeddable C89 virtual machine.
 
 Features:
   * Easily write/read bytecode with printable ASCII characters
-  * Header only library, easy integrated in C programs
+		* Allows easy scaffolding of new languages or direct use of Pangolin as a
+		  programming language for simple tasks.
+  * Header only C89 library, easy integrated in C programs
   * Two typed stacks
   * No garbage collector, memory is managed thru the data stack
   * Array operations
@@ -19,7 +21,7 @@ Work in progress.
 
     k key ( <gets char> -- c )
     e emit ( n -- <prints char> )
-		n number display ( n -- <prints number representation> )
+		_ print object ( n -- <prints object representation> )
     r read ( <k until enter> -- s )
     p print ( s -- <prints string> )
     
@@ -59,7 +61,9 @@ Work in progress.
 		m map ( [A] [P] -- <P applied to each item in A> )
 		z zip ( [A] [B] [P] -- <P applied to each A and B pairs> )
 		{ left fold ( [A] [P] -- n )
+		.{ left fold with initial argument
 		} right fold ( [A] [P] -- n )
+		.} right fold with initial argument
 		f filter ( [A] [P] -- <array with only the items that pass predicate P> )
  
     'c character literal ( -- c )
@@ -71,8 +75,6 @@ Work in progress.
 ### Integers
 ### Floating point
 ## Arrays
-
-    "test string"
 
 ## Continuation
 

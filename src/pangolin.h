@@ -473,20 +473,22 @@ void P_zip(X* x, B* q) {
   });
 }
 
-void P_left_fold(X* x) {
+void P_left_fold(X* x, I v) {
 	OF2(x, {
 		B* q = (B*)TO_R(x)->v.i;
 		O* o = TO_R(x);
 		I i;
 		if (o->t % I8 == 0) {
 			B* a = (B*)o->v.i;
-			for (i = 0; i < o->c; i++) {
+			if (!v) PUSH(x, a[0]);
+			for (i = v ? 0 : 1; i < o->c; i++) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
 		} else if (o->t % I64 == 0) {
 			I* a = (I*)o->v.i;
-			for (i = 0; i < o->c; i++) {
+			if (!v) PUSH(x, a[0]);
+			for (i = v ? 0 : 1; i < o->c; i++) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
@@ -494,20 +496,22 @@ void P_left_fold(X* x) {
 	});
 }
 
-void P_right_fold(X* x) {
+void P_right_fold(X* x, I v) {
 	OF2(x, {
 		B* q = (B*)TO_R(x)->v.i;
 		O* o = TO_R(x);
 		I i;
 		if (o->t % I8 == 0) {
 			B* a = (B*)o->v.i;
-			for (i = o->c - 1; i >= 0; i--) {
+			if (!v) PUSH(x, a[o->c - 1]);
+			for (i = o->c - (v ? 1 : 2); i >= 0; i--) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
 		} else if (o->t % I64 == 0) {
 			I* a = (I*)o->v.i;
-			for (i = o->c - 1; i >= 0; i--) {
+			if (!v) PUSH(x, a[o->c - 1]);
+			for (i = o->c - (v ? 1 : 2); i >= 0; i--) {
 				PUSH(x, a[i]);
 				CALL(x, q); DO(x, P_inner);
 			}
@@ -655,7 +659,7 @@ void P_inner(X* x) {
 			/* INPUT/OUTPUT */
       case 'k': DO(x, KEY); break;
       case 'e': DO(x, EMIT); break;
-			case '.': DO(x, P_print_object); break;
+			case '_': DO(x, P_print_object); break;
       case 'p': DO(x, P_print); break;
       case 'r': DO(x, P_read); break;
 			/* ARITHMETICS */
@@ -694,9 +698,17 @@ void P_inner(X* x) {
 			case '$': DO(x, P_shape); break;
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '{': DO(x, P_left_fold); break;
-			case '}': DO(x, P_right_fold); break;
+			case '{': DO1(x, P_left_fold, 0); break;
+			case '}': DO(x, P_right_fold, 0); break;
 			case 'f': DO(x, P_filter); break;
+			/* VARIATIONS WITH ONE PARAMETER */
+			case '.':
+				IP(x)++;
+				switch (*IP(x)) {
+					case '{': DO1(x, P_left_fold, 1); break;
+					case '}': DO1(x, P_right_fold, 1); break;
+				}
+				break;
 			/* LITERALS */
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       case '0': case '1': case '2': case'3': case '4':
