@@ -557,6 +557,57 @@ void P_filter(X* x) {
 	});
 }
 
+void P_append(X* x) {
+  /* TODO: I8! */
+  UF2(x, {
+    if (NS(x)->t % ARRAY == 0) {
+      if (TS(x)->t % ARRAY == 0) {
+        O* b = TO_R(x);
+        O* a = TO_R(x);
+        I* p = Pmalloc((a->c + b->c) * sizeof(I));
+        if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+        PUSHM(x, p);
+        TS(x)->t *= I64*ARRAY;
+        TS(x)->c = a->c + b->c;
+        memcpy((I*)TS(x)->v.i, (I*)a->v.i, a->c * sizeof(I));
+        memcpy(((I*)TS(x)->v.i) + a->c, (I*)b->v.i, b->c * sizeof(I));
+      } else {
+        I b = POP(x);
+        O* o = TO_R(x);
+        I* p = Pmalloc((o->c + 1) * sizeof(I));
+        if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+        PUSHM(x, p);
+        TS(x)->t *= I64*ARRAY;
+        TS(x)->c = o->c + 1;
+        ((I*)TS(x)->v.i)[o->c] = b;
+        memcpy((I*)TS(x)->v.i, (I*)o->v.i, o->c * sizeof(I));
+      }
+    } else {
+      if (TS(x)->t % ARRAY == 0) {
+        O* o = TO_R(x);
+        I a = POP(x);
+        I* p = Pmalloc((o->c + 1)*sizeof(I));
+        if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+        PUSHM(x, p);
+        TS(x)->t *= I64*ARRAY;
+        TS(x)->c = o->c + 1;
+        ((I*)TS(x)->v.i)[0] = a;
+        memcpy(((I*)TS(x)->v.i) + 1, (I*)o->v.i, o->c * sizeof(I));
+      } else {
+        I b = POP(x);
+        I a = POP(x);
+        I* p = Pmalloc(2*sizeof(I));
+        if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+        PUSHM(x, p);
+        TS(x)->t *= I64*ARRAY;
+        TS(x)->c = 2;
+        ((I*)TS(x)->v.i)[0] = a;
+        ((I*)TS(x)->v.i)[1] = b;
+      }
+    }
+  });
+}
+
 /* Input/output */
 void P_print(X* x) {
   O* s = TO_R(x);
@@ -719,6 +770,7 @@ void P_inner(X* x) {
         }
         break;
 			case 'f': DO(x, P_filter); break;
+      case ';': DO(x, P_append); break;
 			/* LITERALS */
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       case '0': case '1': case '2': case'3': case '4':
