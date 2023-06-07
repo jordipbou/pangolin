@@ -699,7 +699,7 @@ void P_inner(X* x) {
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
 			case '{': DO1(x, P_left_fold, 0); break;
-			case '}': DO(x, P_right_fold, 0); break;
+			case '}': DO1(x, P_right_fold, 0); break;
 			case 'f': DO(x, P_filter); break;
 			/* VARIATIONS WITH ONE PARAMETER */
 			case '.':
