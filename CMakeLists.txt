@@ -20,3 +20,10 @@ add_executable (
 	src/repl.c)
 
 target_include_directories (repl PRIVATE src)
+
+add_executable (
+  data_tests
+	src/data_tests.c
+	deps/Unity/src/unity.c)
+
+target_include_directories (data_tests PRIVATE src deps/Unity/src)
