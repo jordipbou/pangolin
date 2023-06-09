@@ -202,7 +202,7 @@ void test_dump_rstack() {
   RPUSH(x, "ds");
   memset(buf, 0, sizeof buf);
   dump_rstack(buf, x);
-  TEST_ASSERT_EQUAL_STRING("11+] : ds : 7", buf);
+  TEST_ASSERT_EQUAL_STRING("11+] : ds : (7)", buf);
 }
 
 void test_inner() {

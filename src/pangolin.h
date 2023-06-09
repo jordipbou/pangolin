@@ -236,8 +236,14 @@ I dump_rstack(B* s, X* x) {
   }
   for (j = RDEPTH(x); j > 0; j--) {
     SEPARATOR;
+    if (RPK(x, j - 1)->t % RETURN != 0) {
+      *s++ = '('; n++;
+    }
     s += t = dump_o(s, RPK(x, j - 1));
     n += t;
+    if (RPK(x, j - 1)->t % RETURN != 0) {
+      *s++ = ')'; n++;
+    }  
   }
 
   return n;
@@ -252,8 +258,6 @@ I dump(B* s, X* x) {
 	s += t = sprintf(s, "%40s: ", r);
 	s += n = dump_rstack(s, x);
 	n += t;
-  s += t = sprintf(s, "<%ld>", RP(x));
-  n += t;
 
 	return t;
 }
@@ -296,6 +300,7 @@ void P_dup(X* x) { /* ( a -- a a ) */
     });
   });
 }
+
 void P_swap(X* x) { /* ( a b -- b a ) */ 
   UF2(x, {
 	  I t = TS(x)->v.i; TS(x)->v.i = NS(x)->v.i; NS(x)->v.i = t; 
@@ -384,6 +389,7 @@ void P_binrec(X* x) {
 }
 
 /* Arrays */
+/*
 void P_iota(X* x, I s) {
   OF1(x, {
     I n = POP(x);
@@ -395,6 +401,23 @@ void P_iota(X* x, I s) {
     PUSHM(x, b);
     TS(x)->c = n;
     TS(x)->t *= I64*ARRAY;
+  });
+}
+*/
+
+void P_count(X* x, I a, I b, I s) {
+  OF1(x, {
+    I c = (b - a)/s + 1;
+    I i;
+    I j = 0; 
+    I* p = Pmalloc(c * sizeof(I));
+    if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+    PUSHM(x, p);
+    TS(x)->t *= I64*ARRAY;
+    TS(x)->c = c;
+    for (i = a; i <= b; i += s) {
+      p[j++] = i;
+    }
   });
 }
 
@@ -591,8 +614,8 @@ void P_append(X* x) {
         PUSHM(x, p);
         TS(x)->t *= I64*ARRAY;
         TS(x)->c = o->c + 1;
-        ((I*)TS(x)->v.i)[0] = a;
-        memcpy(((I*)TS(x)->v.i) + 1, (I*)o->v.i, o->c * sizeof(I));
+        p[0] = a;
+        memcpy(p + 1, (I*)o->v.i, o->c * sizeof(I));
       } else {
         I b = POP(x);
         I a = POP(x);
@@ -601,8 +624,8 @@ void P_append(X* x) {
         PUSHM(x, p);
         TS(x)->t *= I64*ARRAY;
         TS(x)->c = 2;
-        ((I*)TS(x)->v.i)[0] = a;
-        ((I*)TS(x)->v.i)[1] = b;
+        p[0] = a;
+        p[1] = b;
       }
     }
   });
@@ -622,7 +645,7 @@ void P_drop_from(X* x) {
       PUSHM(x, p);
       TS(x)->t *= I64*ARRAY;
       TS(x)->c = a->c - n;
-      memcpy((I*)TS(x)->v.i, ((I*)a->v.i) + n, (a->c - n) * sizeof(I));
+      memcpy(p, ((I*)a->v.i) + n, (a->c - n) * sizeof(I));
     }
   });
 }
@@ -631,13 +654,59 @@ void P_take_from(X* x) {
   UF2(x, {
     I n = POP(x);
     if (n >= TS(x)->c) return;
+    if (n == 1 && TS(x)->c >= 1) {
+      I i = ((I*)TS(x)->v.i)[0];
+      POP(x);
+      PUSH(x, i);
+      return;
+    }
     O* o = TO_R(x);
     I* p = Pmalloc(n * sizeof(I));
     if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
     PUSHM(x, p);
     TS(x)->t *= I64*ARRAY;
     TS(x)->c = n;
-    memcpy((I*)TS(x)->v.i, (I*)o->v.i, n * sizeof(I));
+    memcpy(p, (I*)o->v.i, n * sizeof(I));
+  });
+}
+
+void P_drop_last(X* x) {
+  UF2(x, {
+    I n = POP(x);
+    if (n >= TS(x)->c) {
+      POP(x);
+      PUSH(x, 0);
+      TS(x)->t *= I64*ARRAY;
+      TS(x)->c = 0;  
+    } else {
+      O* a = TO_R(x);      
+      I* p = Pmalloc((a->c - n) * sizeof(I));
+      if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+      PUSHM(x, p);
+      TS(x)->t *= I64*ARRAY;
+      TS(x)->c = a->c - n;
+      memcpy(p, (I*)a->v.i, (a->c - n) * sizeof(I));
+    }
+  });
+}
+
+void P_take_last(X* x) {
+  UF2(x, {
+    I n = POP(x);
+    if (n == 1 && TS(x)->c >= 1) {
+      I i = ((I*)TS(x)->v.i)[TS(x)->c - 1];
+      POP(x);
+      PUSH(x, i);
+      return;
+    }
+    if (n >= TS(x)->c) return;
+    O* a = TO_R(x);
+    I* p = Pmalloc(n * sizeof(I));
+    if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+    PUSHM(x, p);
+    TS(x)->t *= I64*ARRAY;
+    TS(x)->c = n;
+    memcpy(p, ((I*)a->v.i) + (a->c - n), n * sizeof(I));
   });
 }
 
@@ -725,6 +794,10 @@ I P_forward(X* x, I o, I c) {
 	return n - 1;
 }
 
+#define DOT(v1, v2) if (*(IP(x) + 1) == '.') { IP(x)++; v1; } else { v2; }
+
+#define VAR2(v2, v1, v0) if (*(IP(x) + 1) == ':') { IP(x)++; v2; } else if (*(IP(x) + 1) == '.') { IP(x)++; v1; } else { v0; }
+
 void P_inner(X* x) {
 	B buf[255];
 	B op;
@@ -775,37 +848,16 @@ void P_inner(X* x) {
 			case 'l': P_linrec(x, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i, (B*)TO_R(x)->v.i); break;
       case 'b': DO(x, P_binrec); break;
 			/* ARRAYS */
-      case '#': 
-        if (*(IP(x) + 1) == '.') {
-          IP(x)++;
-          DO1(x, P_iota, 1);
-        } else {
-          DO1(x, P_iota, 0);
-        }
-        break;
+      case '#': VAR2(DO3(x, P_count, POP(x), POP(x), POP(x)), DO3(x, P_count, POP(x), POP(x), 1), DO3(x, P_count, 0, POP(x) - 1, 1)); break;
 			case '$': DO(x, P_shape); break;
       case 'm': DO(x, P_map); break;
       case 'z': DO1(x, P_zip, (B*)TO_R(x)->v.i); break;
-			case '{': 
-        if (*(IP(x) + 1) == '.') {
-          IP(x)++;
-          DO1(x, P_left_fold, 1);
-        } else {
-          DO1(x, P_left_fold, 0); 
-        }
-        break;
-			case '}':
-        if (*(IP(x) + 1) == '.') {
-          IP(x)++;
-          DO1(x, P_right_fold, 1);
-        } else {
-          DO1(x, P_right_fold, 0); 
-        }
-        break;
+			case '{': DOT(DO1(x, P_left_fold, 1), DO1(x, P_left_fold, 0)); break;
+			case '}': DOT(DO1(x, P_right_fold, 1), DO1(x, P_right_fold, 0));
 			case 'f': DO(x, P_filter); break;
       case ';': DO(x, P_append); break;
-      case '(': DO(x, P_drop_from); break;
-      case ')': DO(x, P_take_from); break;
+      case '(': DOT(DO(x, P_take_last), DO(x, P_drop_from)); break;
+      case ')': DOT(DO(x, P_drop_last), DO(x, P_take_from)); break;
 			/* LITERALS */
 			case '\'': OF1(x, { PUSH(x, *++x->ip); }); break;
       case '0': case '1': case '2': case'3': case '4':
