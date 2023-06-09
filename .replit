@@ -1,5 +1,6 @@
 compile = "cmake --log-level=WARNING -DCMAKE_BUILD_TYPE=Debug -B/tmp/build . && make -s -C /tmp/build"
-run = "/tmp/build/tests && /tmp/build/repl"
+# run = "/tmp/build/tests && /tmp/build/repl"
+run = "/tmp/build/data_tests"
 hidden = ["main", "main-debug", "**/*.o", "**/*.d", ".ccls-cache", "Makefile"]
 
 [nix]

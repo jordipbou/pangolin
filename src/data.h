@@ -25,6 +25,7 @@ typedef struct _O { I t; I c; I s; I e; union { I i; F f; B* ab; I* ai; F* af; s
 #define END(o) (o->e)
 #define LEN(o) (END(o) - START(o))
 #define SZ(o) (o->c)
+#define FREE(o) (SZ(o) - LEN(o))
 
 #define I(o) (o->v.i)
 #define F(o) (o->v.f)
@@ -61,17 +62,22 @@ I L_push_I(O* o, I v) {
 }
 
 O* L_reserve(O* o, I n) {
-	/* TODO: Take into account the case that there's enough free space */
-	if (END(o) == SZ(o)) {
-		if (START(o) != 0) {
+  if ((END(o) + n) <= SZ(o)) { 
+    return o;
+  } else {
+		if (FREE(o) >= n) {
+      I i; 
+      for (i = 0; i < LEN(o); i++) {
+        aO(o)[i] = aO(o)[i + START(o)];
+      }
 			END(o) = END(o) - START(o);
 			START(o) = 0;
-			memmove(aO(o), aO(o) + START(o), SZ(o) * sizeof(O));
 		} else {
 			I i;
-			O* n = Pmalloc((2*SZ(o)) * sizeof(O));
+      I sz = (2*SZ(o)) < n ? n : SZ(o);
+			O* n = Pmalloc((2*sz) * sizeof(O));
 			if (n == 0) return 0;
-			SZ(n) = 2*SZ(o);
+			SZ(n) = 2*sz;
 			TYPE(n) = TYPE(o);
 			memcpy(aO(n), aO(o) + START(o), SZ(o) * sizeof(O));
 			Pfree(o);
@@ -81,8 +87,12 @@ O* L_reserve(O* o, I n) {
 }
 
 void L_free(O* o) {
-	Pfree((O*)o->v.i);
-	Pfree(o);
+  if (o->v.i != 0) {
+	  Pfree((O*)o->v.i);
+  }
+  if (o != 0) {
+	  Pfree(o);
+  }
 }
 
 #endif
