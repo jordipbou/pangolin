@@ -5,94 +5,135 @@
 #include<stdlib.h>
 #include<string.h>
 
+#ifndef Pmalloc
 #define Pmalloc(c) (malloc(c))
+#endif
+
+#ifndef Prealloc
+#define Prealloc(b, c) (realloc(b, c))
+#endif
+
+#ifndef Pfree
 #define Pfree(p) (free(p))
+#endif
+
+#ifndef MIN_CAPACITY
+#define MIN_CAPACITY 5
+#endif
+
+#ifndef GROWTH_FACTOR
+#define GROWTH_FACTOR 1.5
+#endif
 
 typedef char B;
 typedef intptr_t I;
 typedef double F;
 
-enum { ANY = 1, INT = 2, FLOAT = 3, MANAGED = 5, ARRAY = 7, I8 = 11, I16 = 13, I32 = 17, I64 = 19, F32 = 23, F64 = 29, OBJECT = 31, RETURN = 37 } T;
+enum {
+  INT = 2,
+  FLOAT = 3,
+  MANAGED = 5,
+  ARRAY = 7,
+  I8 = 11,
+  I16 = 13,
+  I32 = 17,
+  I64 = 19,
+  F32 = 23,
+  F64 = 29,
+  OBJECT = 31,
+  STRUCT = 37,
+  RETURN = 41
+} TYPE;
 
-typedef struct _O { I t; I c; I s; I e; union { I i; F f; B* ab; I* ai; F* af; struct _O* ao; } v; } O;
+typedef struct {
+  I type;
+  I capacity;
+  I size;
+  union {
+    I integer;
+    F floating_point;
+    void* array;
+  } value;
+} O;
 
-#define IS(o, t) (o->t % t == 0)
+#define T(o) (o->type)
+#define IS(o, t) (T(o) % t == 0)
 
-#define TYPE(o) (o->t)
-#define AS(o, t) (TYPE(o) = (IS(o, t) ? TYPE(o) : (TYPE(o)*t)))
+#define C(o) (o->capacity)
+#define S(o) (o->size)
 
-#define START(o) (o->s)
-#define END(o) (o->e)
-#define LEN(o) (END(o) - START(o))
-#define SZ(o) (o->c)
-#define FREE(o) (SZ(o) - LEN(o))
+#define I(o) (o->value.integer)
+#define F(o) (o->value.floating_point)
+#define P(o) (o->value.array)
 
-#define I(o) (o->v.i)
-#define F(o) (o->v.f)
-#define aI8(o) (o->v.ab)
-#define aI(o) (o->v.ai)
-#define aF(o) (o->v.af)
-#define aO(o) (o->v.ao)
-#define idxO(o, idx) (&aO(o)[idx])
+#define aB(o) ((B*)P(o))
+#define aI(o) ((I*)P(o))
+#define aF(o) ((F*)P(o))
+#define aO(o) ((O*)P(o))
 
-O* L_alloc(I sz) {
-	O* o = Pmalloc(sizeof(O));
-	if (o == 0) return 0;
-	o->v.i = (I)Pmalloc(sz * sizeof(O));
-	if (aO(o) == 0) {
-	  free(o);
-		return 0;
-	}
-	TYPE(o) = INT*OBJECT*ARRAY;
-	START(o) = 0;
-	END(o) = 0;
-	SZ(o) = sz;
+#define Iat(o, n) ((aO(o)[n]).value.integer)
+#define Fat(o, n) ((aO(o)[n]).value.floating_point)
+#define Pat(o, n) ((aO(o)[n]).value.array)
+
+O* setO(O* o, I t, I c, I s) {
+  T(o) = t;
+  C(o) = c;
+  S(o) = s;
+  return o;
 }
 
-/* Returns 1 if no error and 0 if there's not enough space to push another element */
-I L_push_I(O* o, I v) {
-	O* item;
-	if (END(o) == SZ(o)) return 0; 
-	item = idxO(o, END(o)++);
-	TYPE(item) = INT;
-	SZ(item) = 0;
-	I(item) = v;
-
-	return 1;
+O* setOI(O* o, I v) {
+  I(setO(o, INT, 0, 0)) = v;
+  return o;
 }
 
-O* L_reserve(O* o, I n) {
-  if ((END(o) + n) <= SZ(o)) { 
-    return o;
+O* setOF(O* o, F v) {
+  F(setO(o, FLOAT, 0, 0)) = v;
+  return o;
+}
+
+O* setOP(O* o, I t, I c, I s, void* p) {
+  P(setO(o, t, c, s)) = p;
+  return o;
+}
+
+O* newO() { 
+  return Pmalloc(sizeof(O)); 
+}
+
+void freeO(O* o) {
+  if (IS(o, MANAGED)) {
+    Pfree(P(o));
+  }
+  Pfree(o);
+}
+
+#define OF(o, n) ((S(o) + n) > C(o))
+#define UF(o, n) (S(o) >= n)
+
+#define LPUSHI(o, v) (setOI(&aO(o)[S(o)++], v))
+#define LPUSHF(o, v) (setOF(&aO(o)[S(o)++], v))
+#define LPUSHa(o, t, c, s, p) (setOP(&aO(o)[S(o)++], INT*ARRAY*t, c, s, p))
+#define LPUSHMa(o, t, c, s, p) (LPUSHa(o, t*MANAGED, c, s, p))
+
+#define LPOPI(o) (Iat(o, --S(o)))
+#define LPOPF(o) (Fat(o, --S(o)))
+#define LPOPU(o) (Pat(o, --S(o)))
+
+#define DROP(o) if (IS(o, MANAGED)) { Pfree(Pat(o, --S(o))); } else { S(o)--; }
+
+I Lreserve(O* o, I n) {
+  I sz;
+  if (OF(o, n)) {
+    sz = (I)(((F)(C(o) + n)) * GROWTH_FACTOR);
+    void* a = Prealloc(P(o), sz*sizeof(O));
+    if (a == 0) { return 0; }
+    P(o) = a;
+    C(o) = sz;
+    return 1;
   } else {
-		if (FREE(o) >= n) {
-      I i; 
-      for (i = 0; i < LEN(o); i++) {
-        aO(o)[i] = aO(o)[i + START(o)];
-      }
-			END(o) = END(o) - START(o);
-			START(o) = 0;
-		} else {
-			I i;
-      I sz = (2*SZ(o)) < n ? n : SZ(o);
-			O* n = Pmalloc((2*sz) * sizeof(O));
-			if (n == 0) return 0;
-			SZ(n) = 2*sz;
-			TYPE(n) = TYPE(o);
-			memcpy(aO(n), aO(o) + START(o), SZ(o) * sizeof(O));
-			Pfree(o);
-			o = n;
-		}
-	}
-}
-
-void L_free(O* o) {
-  if (o->v.i != 0) {
-	  Pfree((O*)o->v.i);
-  }
-  if (o != 0) {
-	  Pfree(o);
-  }
+    return 1;
+  } 
 }
 
 #endif
