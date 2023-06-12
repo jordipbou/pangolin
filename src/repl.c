@@ -36,8 +36,8 @@ int _getch ()
 }
 #endif
 
-void key(X* x) { OF1(x, { PUSH(x, _getch()); }); }
-void emit(X* x) { UF1(x, { printf("%c", (char)POP(x)); }); }
+void key(X* x) { OF(x, 1, { PUSHI(x, INT, _getch()); }); }
+void emit(X* x) { UF(x, 1, { printf("%c", (B)POPI(x)); }); }
 
 int main() {
 	B buf[255];
@@ -48,5 +48,9 @@ int main() {
 
 	x->tr = 1;
 
-	P_repl(x);
+	/* P_repl(x); */
+
+  x->ip = "3 11+";
+  P_inner(x);
+  printf("%ld\n", I(TS(x)));
 }
