@@ -107,7 +107,8 @@ typedef struct _X {
 	O* s;
   O* r;
 	B* ip; 
-	I tr; 
+	I tr;
+  I lw;
 	I err;
   void (*k)(struct _X*);
   void (*e)(struct _X*);
@@ -127,6 +128,8 @@ X* init() {
 
 #define KEY(x) (x->k(x))
 #define EMIT(x) (x->e(x))
+
+#define LINE_WIDTH(x) (x->lw)
 
 #define IP(x) (x->ip)
 #define PEEK_TOKEN(x) (x->ip == 0 ? 0 : *(x->ip))
@@ -889,12 +892,73 @@ void P_repl(X* x) {
 }
 */
 
+/* Input/output */
+
+void P_print(X* x) {
+  UF(x, 1, {
+    R_OF(x, 1, {
+      O* s = TO_R(x);
+      I i;
+      for (i = 0; i < S(s); i++) {
+        PUSHI(x, INT, Bat(s, i));
+        EMIT(x);
+      }
+      R_DROP(x);
+    });
+  });
+}
+
+/*
+void P_read(X* x) {
+  B* s;
+  I c, i;
+  OF1(x, {
+    PUSH(x, 0);
+    do {
+      DO(x, KEY);
+      DO(x, P_dup);
+      DO(x, EMIT);
+      if (TS(x)->v.i == 10) {
+        POP(x);
+        c = POP(x);
+        s = (B*)Pmalloc(c);
+        for (i = c - 1; i >= 0; i--) {
+          s[i] = (B)POP(x); 
+        } 
+        PUSH(x, s);
+				TS(x)->c = c;
+        TS(x)->t *= I8*ARRAY*MANAGED;
+        return;
+      } else {
+        DO(x, P_swap);
+        TS(x)->v.i++;
+      }
+    } while(1);
+  });
+}
+
+void P_print_object(X* x) {
+	B buf[255];
+	I sz;
+	I i;
+	memset(buf, 0, sizeof buf);
+	UF1(x, {
+		sz = dump_o(buf, TS(x));
+		for (i = 0; i < sz; i++) {
+			PUSH(x, buf[i]);
+			EMIT(x);
+		}
+		POP(x);
+	});
+}
+*/
+
 /* External representation */
 
 I SEEMS_STRING(O* o) {
   I i, c;
   if (IS(o, I8*ARRAY)) {
-    for (i = 0; i < C(o); i++) {
+    for (i = 0; i < S(o); i++) {
       c = Bat(o, i);
       if (c < 31 || c > 126) 
         return 0; 
@@ -910,17 +974,17 @@ I SEEMS_STRING(O* o) {
 I dump_O(B* s, O* o) {
   I i, n = 0, t, r = 1;
 	if (SEEMS_STRING(o)) {
-		return sprintf(s, "[%.*s]", (unsigned int)C(o), PB(o));
+		return sprintf(s, "[%.*s]", (unsigned int)S(o), PB(o));
 	} else if (IS(o, I8*ARRAY)) {
     DUMP("[");
-		for (i = 0; i < C(o); i++) {
+		for (i = 0; i < S(o); i++) {
 			s += t = sprintf(s, "%d ", Bat(o, i)); n += t;
 		}
     DUMP("]");
 		return n;
 	} else if (IS(o, I64*ARRAY)) {
     DUMP("[");
-		for (i = 0; i < C(o); i++) {
+		for (i = 0; i < S(o); i++) {
 			s += t = sprintf(s, "%ld ", Iat(o, i)); n += t;
 		}
     DUMP("]");
@@ -969,11 +1033,13 @@ I dump(B* s, X* x) {
 
 	memset(r, 0, sizeof r);
 	n = dump_S(r, x, 0);
-	s += t = sprintf(s, "%40s: ", r);
-	s += n = dump_R(s, x);
+	s += t = sprintf(s, "%*s: ", LINE_WIDTH(x), r);
+  n += t;
+	s += t = dump_R(s, x);
 	n += t;
+  *s++ = 10; n++;
 
-	return t;
+	return n;
 }
 
 /* Virtual Machine */
@@ -1132,10 +1198,10 @@ void P_bin_rec(X* x) {
 }
 
 void P_inner(X* x) {
-	B buf[255], op;
+	B buf[255], op, l;
   I r = RP(x); 
   do {
-		if (TRACE(x)) {	memset(buf, 0, sizeof buf);	dump(buf, x);	printf("%s\n", buf); }
+		if (TRACE(x)) {	memset(buf, 0, sizeof buf); l = dump(buf, x);	PUSHP(x, INT*I8*ARRAY, l, l, buf); DO(x, P_print(x)); /* printf("%s\n", buf); */ }
     op = PEEK_TOKEN(x);
     switch (op) {
     case '0': case '1': case '2': case '3': case '4':
@@ -1151,6 +1217,9 @@ void P_inner(X* x) {
     default:
       op = GET_TOKEN(x);
       switch (op) {
+        case 'k': KEY(x); break;
+        case 'e': EMIT(x); break;
+        case 'p': P_print(x); break;
         case '+': P_add(x); break;
         case '-': P_sub(x); break;
         case '<': P_lt(x); break;
