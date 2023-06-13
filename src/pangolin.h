@@ -196,16 +196,12 @@ F POPF(X* x) { F v = F(TS(x)); DROP(x); return v; }
 O* TO_R(X* x) {
 	O* a;
 	O* b;
-	UF(x, 1, {
-		R_OF(x, 1, {
-			RP(x)++;
-			b = TR(x);
-			a = TS(x);
-			setOP(b, T(a), C(a), S(a), P(a));
-			SP(x)--;
-			return TR(x);
-		});
-	});
+	RP(x)++;
+	b = TR(x);
+	a = TS(x);
+	setOP(b, T(a), C(a), S(a), P(a));
+	SP(x)--;
+	return TR(x);
 }
 
 #define R_PUSH(x, q) setOI(Oat(x->r, S(x->r)++), RET_ADDR, (I)(q))
@@ -895,7 +891,7 @@ void P_repl(X* x) {
 /* Input/output */
 
 void P_print(X* x) {
-  UF(x, 1, {
+  UF(x, 1, { 
     R_OF(x, 1, {
       O* s = TO_R(x);
       I i;
@@ -908,35 +904,33 @@ void P_print(X* x) {
   });
 }
 
-/*
 void P_read(X* x) {
   B* s;
   I c, i;
-  OF1(x, {
-    PUSH(x, 0);
+  OF(x, 1, {
+    PUSHI(x, INT, 0);
     do {
-      DO(x, KEY);
-      DO(x, P_dup);
-      DO(x, EMIT);
-      if (TS(x)->v.i == 10) {
-        POP(x);
-        c = POP(x);
+      DO(x, KEY(x));
+      DO(x, P_dup(x));
+      DO(x, EMIT(x));
+      if (I(TS(x)) == 10) {
+        POPI(x);
+        c = POPI(x);
         s = (B*)Pmalloc(c);
+        if (s == 0) { ERROR(x) = ERR_ALLOCATION; return; }
         for (i = c - 1; i >= 0; i--) {
-          s[i] = (B)POP(x); 
+          s[i] = (B)POPI(x); 
         } 
-        PUSH(x, s);
-				TS(x)->c = c;
-        TS(x)->t *= I8*ARRAY*MANAGED;
+        PUSHP(x, INT*I8*ARRAY*MANAGED, c, c, s);
         return;
       } else {
-        DO(x, P_swap);
-        TS(x)->v.i++;
+        DO(x, P_swap(x));
+        I(TS(x))++;
       }
     } while(1);
   });
 }
-
+/*
 void P_print_object(X* x) {
 	B buf[255];
 	I sz;
@@ -1120,24 +1114,22 @@ void P_dup(X* x) {
 	I sz;
 	O* o = TS(x);
 	void* p;
-  UF(x, 1, {
-		OF(x, 1, {
-			if (IS(o, OBJECT*ARRAY)) {
-				/* Clone recursively */
-			} else if (IS(o, ARRAY)) {
-				if (IS(o, I8)) { sz = 1; }
-				else if (IS(o, I16)) { sz = 2; }
-				else if (IS(o, I32)) { sz = 4; }
-				else if (IS(o, I64)) { sz = 8; }
-				p = Pmalloc(S(o) * sz); if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
-				memcpy(p, P(o), S(o) * sz);
-				PUSHP(x, WITH(T(o), MANAGED), S(o), S(o), p);
-			/* TODO: What about structs and ret_addrs? */
-			} else {
-				PUSHP(x, T(o), C(o), S(o), P(o));	
-			}
-		});
-  });
+  UF(x, 1, { OF(x, 1, {
+		if (IS(o, OBJECT*ARRAY)) {
+			/* Clone recursively */
+		} else if (IS(o, ARRAY)) {
+			if (IS(o, I8)) { sz = 1; }
+			else if (IS(o, I16)) { sz = 2; }
+			else if (IS(o, I32)) { sz = 4; }
+			else if (IS(o, I64)) { sz = 8; }
+			p = Pmalloc(S(o) * sz); if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+			memcpy(p, P(o), S(o) * sz);
+			PUSHP(x, WITH(T(o), MANAGED), S(o), S(o), p);
+		/* TODO: What about structs and ret_addrs? */
+		} else {
+			PUSHP(x, T(o), C(o), S(o), P(o));	
+		}
+	});});
 }
 
 void P_rot(X* x) {
@@ -1201,7 +1193,12 @@ void P_inner(X* x) {
 	B buf[255], op, l;
   I r = RP(x); 
   do {
-		if (TRACE(x)) {	memset(buf, 0, sizeof buf); l = dump(buf, x);	PUSHP(x, INT*I8*ARRAY, l, l, buf); DO(x, P_print(x)); /* printf("%s\n", buf); */ }
+		if (TRACE(x)) {	
+      memset(buf, 0, sizeof buf); 
+      l = dump(buf, x);	
+      PUSHP(x, INT*I8*ARRAY, l, l, buf); 
+      DO(x, P_print(x)); 
+    }
     op = PEEK_TOKEN(x);
     switch (op) {
     case '0': case '1': case '2': case '3': case '4':
@@ -1219,6 +1216,7 @@ void P_inner(X* x) {
       switch (op) {
         case 'k': KEY(x); break;
         case 'e': EMIT(x); break;
+        case 'r': P_read(x); break;
         case 'p': P_print(x); break;
         case '+': P_add(x); break;
         case '-': P_sub(x); break;
