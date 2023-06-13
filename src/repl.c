@@ -50,7 +50,9 @@ int main() {
 
 	/* P_repl(x); */
 
-  x->ip = "3 11+";
+  x->ip = "3.1415 11[Hello world!]";
   P_inner(x);
-  printf("%ld\n", I(TS(x)));
+  memset(buf, 0, sizeof(buf));
+  dump_S(buf, TS(x), 1);
+  printf("%s\n", buf);
 }

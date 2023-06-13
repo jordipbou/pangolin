@@ -3,6 +3,7 @@
 
 #include<stdint.h>
 #include<stdlib.h>
+#include<string.h>
 
 #ifndef Pmalloc
 #define Pmalloc(c) (malloc(c))
@@ -136,13 +137,15 @@ X* init() {
 
 #define SP(x) (S(x->s))
 
-#define TS(x) (Oat(x->s, SP(x) - 1))
-#define NS(x)	(Oat(x->s, SP(x) - 2))
-#define NNS(x) (Oat(x->s, SP(x) - 3))
+#define PK(x, i) (Oat(x->s, i))
+#define TS(x) (PK(x, SP(x) - 1))
+#define NS(x)	(PK(x, SP(x) - 2))
+#define NNS(x) (PK(x, SP(x) - 3))
 
 #define RP(x) (S(x->r))
 
-#define TR(x) (Oat(x->r, RP(x) - 1))
+#define RPK(x, i) (Oat(x->r, i))
+#define TR(x) (RPK(x, RP(x) - 1))
 
 void P_inner(X*);
 
@@ -254,92 +257,7 @@ B* RPOP(X* x, I r) {
 */
 /* External representation */
 /*
-#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && *(op + i) != 10 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
 
-I dump_o(B* s, O* o) {
-	if (T(o) % ARRAY == 0) {
-		I i, n = 0, t;
-		if (T(o) % I8 == 0) {
-			I r = 1; 
-			for (i = 0; i < C(o); i++) {
-				if (aB(o)[i] < 31 || aB(o)[i] > 126) { r = 0; }
-			}
-			if (r) {
-				return sprintf(s, "[%.*s]", (unsigned int)C(o), aB(o);
-			} else {
-				s += t = sprintf(s, "["); n += t;
-				for (i = 0; i < C(o); i++) {
-					s += t = sprintf(s, "%d ", aB(o)[i]); n += t;
-				}
-				s += t = sprintf(s, "]"); n += t;
-				return n;
-			}
-		} else if (T(o) % I64 == 0) {
-			s += t = sprintf(s, "["); n += t;
-			for (i = 0; i < C(o); i++) {
-				s += t = sprintf(s, "%ld ", aI(o)[i]); n += t;
-			}
-			s += t = sprintf(s, "]"); n += t;
-			return n;
-		}
-	}
-  else if (T(o) % RETURN == 0) { 
-    I i, t = 1, n = 0; 
-    if (I(o) != 0) {
-      DUMP_CODE(aB(o)); 
-      return n; 
-    }
-  }
-	else if (T(o) % INT == 0) { return sprintf(s, "%ld", I(o)); } 
-	else if (T(o) % FLOAT == 0) { return sprintf(s, "%g", F(o)); }
-}
-
-I dump_stack(B* s, X* x, I nl) {
-	I i, t, n = 0;
-	for (i = 0; i < SP(x); i++) { 
-		if (nl) { s += t = sprintf(s, "[%c] ", T(PK(x, i)) % MANAGED == 0 ? 'M' : ' '); n += t; }
-		if (nl) { s += t = sprintf(s, "%08X ", (unsigned int)I(PK(x, i))); n += t; }
-		s += t = dump_o(s, PK(x, i)); 
-		*s++ = nl ? '\n' : ' '; 
-		n += t + 1; 
-	}
-	return n;
-}
-
-#define SEPARATOR	*s++ = ' '; *s++ = ':'; *s++ = ' '; n += 3;
-
-I dump_rstack(B* s, X* x) {
-  I i, j, t = 1, n = 0;
-  if (IP(x)) {
-    DUMP_CODE(IP(x));
-  }
-  for (j = RDEPTH(x); j > 0; j--) {
-    SEPARATOR;
-    if (T(RPK(x, j - 1)) % RETURN != 0) {
-      *s++ = '('; n++;
-    }
-    s += t = dump_o(s, RPK(x, j - 1));
-    n += t;
-    if (T(RPK(x, j - 1)) % RETURN != 0) {
-      *s++ = ')'; n++;
-    }  
-  }
-
-  return n;
-}
-
-I dump(B* s, X* x) {
-	B r[255];
-	I n, t = 0, p;
-
-	memset(r, 0, sizeof r);
-	n = dump_stack(r, x, 0);
-	s += t = sprintf(s, "%40s: ", r);
-	s += n = dump_rstack(s, x);
-	n += t;
-
-	return t;
-}
 void P_add(X* x) { UF2(x, { I(NS(x)) += I(TS(x)); SP(x)--; }); }
 void P_sub(X* x) { UF2(x, { I(NS(x)) -= I(TS(x)); SP(x)--; }); }
 void P_mul(X* x) { UF2(x, { I(NS(x)) *= I(TS(x)); SP(x)--; }); }
@@ -952,6 +870,95 @@ void P_repl(X* x) {
 	} while (1);
 }
 */
+
+/* External representation */
+
+I SEEMS_STRING(O* o) {
+  I i, c;
+  if (IS(o, I8*ARRAY)) {
+    for (i = 0; i < C(o); i++) {
+      c = Bat(o, i);
+      if (c < 31 || c > 126) 
+        return 0; 
+    }
+    return 1;
+  }
+  return 0;
+}
+
+#define DUMP(c) s += t = sprintf(s, c); n += t
+#define DUMP_CODE(op) for (i = 0; *(op + i) != 0 && *(op + i) != 10 && t > 0; i++) { n++; *s++ = *(op + i); if (*(op + i) == '[') t++; else if (*(op + i) == ']') t--; }
+
+I dump_O(B* s, O* o) {
+  I i, n = 0, t, r = 1;
+	if (SEEMS_STRING(o)) {
+		return sprintf(s, "[%.*s]", (unsigned int)C(o), PB(o));
+	} else if (IS(o, I8*ARRAY)) {
+    DUMP("[");
+		for (i = 0; i < C(o); i++) {
+			s += t = sprintf(s, "%d ", Bat(o, i)); n += t;
+		}
+    DUMP("]");
+		return n;
+	} else if (IS(o, I64*ARRAY)) {
+    DUMP("[");
+		for (i = 0; i < C(o); i++) {
+			s += t = sprintf(s, "%ld ", Iat(o, i)); n += t;
+		}
+    DUMP("]");
+		return n;
+	}
+    /*
+  else if (IS(o, RET_ADDR)) { 
+    I i, t = 1, n = 0; 
+    if (I(o) != 0) {
+      DUMP_CODE(PB(o)); 
+      return n; 
+    }
+  }
+  */
+	else if (IS(o, INT)) { return sprintf(s, "%ld", I(o)); } 
+	else if (IS(o, FLOAT)) { return sprintf(s, "%g", F(o)); }
+}
+
+I dump_S(B* s, X* x, I nl) {
+	I i, t, n = 0;
+	for (i = 0; i < SP(x); i++) { 
+		if (nl) { s += t = sprintf(s, "[%c] ", IS(PK(x, i), MANAGED == 0) ? 'M' : ' '); n += t; }
+		if (nl) { s += t = sprintf(s, "%08X ", (unsigned int)I(PK(x, i))); n += t; }
+		s += t = dump_O(s, PK(x, i)); 
+		*s++ = nl ? '\n' : ' '; 
+		n += t + 1; 
+	}
+	return n;
+}
+
+I dump_R(B* s, X* x) {
+  I i, j, t = 1, n = 0;
+  if (IP(x)) { DUMP_CODE(IP(x)); }
+  for (j = 0; j < RP(x); j++) {
+    DUMP(" : ");
+    if (!IS(RPK(x, j - 1), RET_ADDR)) { *s++ = '('; n++; }
+    s += t = dump_O(s, RPK(x, j - 1)); n += t;
+    if (!IS(RPK(x, j - 1), RET_ADDR)) { *s++ = ')'; n++; }  
+  }
+
+  return n;
+}
+
+I dump(B* s, X* x) {
+	B r[255];
+	I n, t = 0, p;
+
+	memset(r, 0, sizeof r);
+	n = dump_S(r, x, 0);
+	s += t = sprintf(s, "%40s: ", r);
+	s += n = dump_R(s, x);
+	n += t;
+
+	return t;
+}
+
 /* Virtual Machine */
 
 void P_parseLiteral(X* x) {
@@ -978,7 +985,7 @@ void P_parseQuotation(X* x) {
     B* s;
     B c;
     I t = 1;
-    I l = 0;
+    I l = -1;
     GET_TOKEN(x);
     s = IP(x);
     while (t > 0) {
