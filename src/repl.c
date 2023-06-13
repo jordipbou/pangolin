@@ -50,7 +50,9 @@ int main() {
 
 	/* P_repl(x); */
 
-  x->ip = "3.1415 11[Hello world!]";
+  /* x->ip = "3.1415d11d[Hello world!]dso"; */
+	x->ip = "1 1 34[so+]ts\\";
+	/* x->ip = "36[d2<][][1-d1-][+]b"; */
   P_inner(x);
   memset(buf, 0, sizeof(buf));
   dump_S(buf, x, 1);

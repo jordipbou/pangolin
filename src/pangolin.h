@@ -55,6 +55,7 @@ typedef struct {
 #define IS(o, t) (T(o) % t == 0)
 #define ARE(o1, t1, o2, t2) (IS(o1, t1) && IS(o2, t2))
 #define BOTH(o1, o2, t) (ARE(o1, t, o2, t))
+#define WITH(ts, t) (ts % t == 0 ? ts : ts*t)
 
 #define C(o) ((o)->capacity)
 #define S(o) ((o)->size)
@@ -182,30 +183,47 @@ I handle(X* x, I err) {
 #define PUSHI(x, t, v) setOI(Oat(x->s, S(x->s)++), t, v)
 #define PUSHF(x, t, v) setOF(Oat(x->s, S(x->s)++), t, v)
 #define PUSHP(x, t, c, sz, p) setOP(Oat(x->s, S(x->s)++), t, c, sz, p)
-
 void DROP(X* x) { 
-  if (IS(TS(x), MANAGED)) { /* Free recursively */ }
+  if (IS(TS(x), MANAGED)) { Pfree(P(TS(x))); /* Free recursively */ }
   SP(x)--;
 }
-
 I POPI(X* x) { I v = I(TS(x)); DROP(x); return v; }
 F POPF(X* x) { F v = F(TS(x)); DROP(x); return v; }
 
-#define R_PUSH(x, r) setOI(Oat(x->r, S(x->r)++), RET_ADDR, (I)r)
-
-void R_DROP(X* x) {
-  if (IS(TR(x), MANAGED)) { /* Free recursively */ }
-  RP(x)--;
+O* TO_R(X* x) {
+	O* a;
+	O* b;
+	UF(x, 1, {
+		R_OF(x, 1, {
+			RP(x)++;
+			b = TR(x);
+			a = TS(x);
+			setOP(b, T(a), C(a), S(a), P(a));
+			SP(x)--;
+			return TR(x);
+		});
+	});
 }
 
+#define R_PUSH(x, q) setOI(Oat(x->r, S(x->r)++), RET_ADDR, (I)(q))
+void R_DROP(X* x) {
+  if (IS(TR(x), MANAGED)) { Pfree(P(TR(x))); /* Free recursively */ }
+  RP(x)--;
+}
 I R_POPI(X* x) { I v = I(TR(x)); R_DROP(x); return v; }
 
 void RETURN(X* x, I r) {
-  while (PEEK_TOKEN(x) == 0) {
+  while (PEEK_TOKEN(x) == 0 || PEEK_TOKEN(x) == ']') {
     if (RP(x) == r || RP(x) == 0) { ERROR(x) = ERR_END_OF_CODE; return; }
     else if (IS(TR(x), RET_ADDR)) { IP(x) = (B*)R_POPI(x); return; }
     else { R_DROP(x); }
   }
+}
+
+void EVAL(X* x, B* q) {
+	if (PEEK_TOKEN(x) && PEEK_TOKEN(x) != ']') { R_PUSH(x, IP(x)); }
+	IP(x) = q;
+	P_inner(x); if (ERROR(x) == ERR_END_OF_CODE) ERROR(x) = ERR_OK;
 }
 
 /*
@@ -935,11 +953,11 @@ I dump_S(B* s, X* x, I nl) {
 I dump_R(B* s, X* x) {
   I i, j, t = 1, n = 0;
   if (IP(x)) { DUMP_CODE(IP(x)); }
-  for (j = 0; j < RP(x); j++) {
+  for (j = RP(x) - 1; j >= 0 ; j--) {
     DUMP(" : ");
-    if (!IS(RPK(x, j - 1), RET_ADDR)) { *s++ = '('; n++; }
-    s += t = dump_O(s, RPK(x, j - 1)); n += t;
-    if (!IS(RPK(x, j - 1), RET_ADDR)) { *s++ = ')'; n++; }  
+    if (!IS(RPK(x, j), RET_ADDR)) { *s++ = '('; n++; }
+    s += t = dump_O(s, RPK(x, j)); n += t;
+    if (!IS(RPK(x, j), RET_ADDR)) { *s++ = ')'; n++; }  
   }
 
   return n;
@@ -1033,37 +1051,93 @@ void P_swap(X* x) {
 }
 
 void P_dup(X* x) {
+	I sz;
+	O* o = TS(x);
+	void* p;
   UF(x, 1, {
-    clone(TS(x)); 
+		OF(x, 1, {
+			if (IS(o, OBJECT*ARRAY)) {
+				/* Clone recursively */
+			} else if (IS(o, ARRAY)) {
+				if (IS(o, I8)) { sz = 1; }
+				else if (IS(o, I16)) { sz = 2; }
+				else if (IS(o, I32)) { sz = 4; }
+				else if (IS(o, I64)) { sz = 8; }
+				p = Pmalloc(S(o) * sz); if (p == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+				memcpy(p, P(o), S(o) * sz);
+				PUSHP(x, WITH(T(o), MANAGED), S(o), S(o), p);
+			/* TODO: What about structs and ret_addrs? */
+			} else {
+				PUSHP(x, T(o), C(o), S(o), P(o));	
+			}
+		});
   });
 }
 
+void P_rot(X* x) {
+	UF(x, 3, {
+		O o;
+		O* c = TS(x);
+		O* b = NS(x);
+		O* a = NNS(x);
+		setOP(&o, T(c), C(c), S(c), P(c));
+		setOP(c, T(a), C(a), S(a), P(a));
+		setOP(a, T(b), C(b), S(b), P(b));
+		setOP(b, T(&o), C(&o), S(&o), P(&o));
+	});
+}
+
 void P_over(X* x) {
-  
+	DO(x, P_swap(x));
+	DO(x, P_dup(x));
+	DO(x, P_rot(x));
+	DO(x, P_rot(x));
 }
 
 void P_drop(X* x) {
-  
+  UF(x, 1, {
+		DROP(x);
+	});
 }
 
 void P_times(X* x) {
-  
+	UF(x, 2, {
+		B* q = PB(TO_R(x));
+		I n = POPI(x);
+		for (; n > 0; n--) { EVAL(x, q); }
+	});
 }
 
 void R_bin_rec(X* x, B* i, B* t, B* r1, B* r2) {
-  
+	DO(x, EVAL(x, i));
+	if (POPI(x)) {
+		EVAL(x, t);
+	} else {
+		DO(x, EVAL(x, r1));
+		DO(x, R_bin_rec(x, i, t, r1, r2));
+		DO(x, P_swap(x));
+		DO(x, R_bin_rec(x, i, t, r1, r2));
+		EVAL(x, r2);
+	}
 }
 
 void P_bin_rec(X* x) {
-  
+	UF(x, 4, {
+		B* r2 = PB(TO_R(x));
+		B* r1 = PB(TO_R(x));
+		B* t = PB(TO_R(x));
+		B* i = PB(TO_R(x));
+		R_bin_rec(x, i, t, r1, r2);
+	});
 }
 
 void P_inner(X* x) {
+	B buf[255], op;
   I r = RP(x); 
   do {
-    B op = PEEK_TOKEN(x);
+		if (TRACE(x)) {	memset(buf, 0, sizeof buf);	dump(buf, x);	printf("%s\n", buf); }
+    op = PEEK_TOKEN(x);
     switch (op) {
-    case 0: RETURN(x, r); break;
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
       P_parseLiteral(x);
@@ -1071,6 +1145,9 @@ void P_inner(X* x) {
     case '[':
       P_parseQuotation(x);
       break;
+    case 0: 
+		case ']':
+			RETURN(x, r); break;
     default:
       op = GET_TOKEN(x);
       switch (op) {
@@ -1079,6 +1156,7 @@ void P_inner(X* x) {
         case '<': P_lt(x); break;
         case 's': P_swap(x); break;
         case 'd': P_dup(x); break;
+				case '@': P_rot(x); break;
         case 'o': P_over(x); break;
         case '\\': P_drop(x); break;
         case 't': P_times(x); break;
