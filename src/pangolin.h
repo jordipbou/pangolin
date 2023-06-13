@@ -888,64 +888,6 @@ void P_repl(X* x) {
 }
 */
 
-/* Input/output */
-
-void P_print(X* x) {
-  UF(x, 1, { 
-    R_OF(x, 1, {
-      O* s = TO_R(x);
-      I i;
-      for (i = 0; i < S(s); i++) {
-        PUSHI(x, INT, Bat(s, i));
-        EMIT(x);
-      }
-      R_DROP(x);
-    });
-  });
-}
-
-void P_read(X* x) {
-  B* s;
-  I c, i;
-  OF(x, 1, {
-    PUSHI(x, INT, 0);
-    do {
-      DO(x, KEY(x));
-      DO(x, P_dup(x));
-      DO(x, EMIT(x));
-      if (I(TS(x)) == 10) {
-        POPI(x);
-        c = POPI(x);
-        s = (B*)Pmalloc(c);
-        if (s == 0) { ERROR(x) = ERR_ALLOCATION; return; }
-        for (i = c - 1; i >= 0; i--) {
-          s[i] = (B)POPI(x); 
-        } 
-        PUSHP(x, INT*I8*ARRAY*MANAGED, c, c, s);
-        return;
-      } else {
-        DO(x, P_swap(x));
-        I(TS(x))++;
-      }
-    } while(1);
-  });
-}
-/*
-void P_print_object(X* x) {
-	B buf[255];
-	I sz;
-	I i;
-	memset(buf, 0, sizeof buf);
-	UF1(x, {
-		sz = dump_o(buf, TS(x));
-		for (i = 0; i < sz; i++) {
-			PUSH(x, buf[i]);
-			EMIT(x);
-		}
-		POP(x);
-	});
-}
-*/
 
 /* External representation */
 
@@ -1036,7 +978,7 @@ I dump(B* s, X* x) {
 	return n;
 }
 
-/* Virtual Machine */
+/* Virtual Machine instructions */
 
 void P_parseLiteral(X* x) {
   OF(x, 1, {
@@ -1189,6 +1131,66 @@ void P_bin_rec(X* x) {
 	});
 }
 
+/* Input/output */
+
+void P_print(X* x) {
+  UF(x, 1, { 
+    R_OF(x, 1, {
+      O* s = TO_R(x);
+      I i;
+      for (i = 0; i < S(s); i++) {
+        PUSHI(x, INT, Bat(s, i));
+        EMIT(x);
+      }
+      R_DROP(x);
+    });
+  });
+}
+
+void P_read(X* x) {
+  B* s;
+  I c, i;
+  OF(x, 1, {
+    PUSHI(x, INT, 0);
+    do {
+      DO(x, KEY(x));
+      DO(x, P_dup(x));
+      DO(x, EMIT(x));
+      if (I(TS(x)) == 10) {
+        POPI(x);
+        c = POPI(x);
+        s = (B*)Pmalloc(c);
+        if (s == 0) { ERROR(x) = ERR_ALLOCATION; return; }
+        for (i = c - 1; i >= 0; i--) {
+          s[i] = (B)POPI(x); 
+        } 
+        PUSHP(x, INT*I8*ARRAY*MANAGED, c, c, s);
+        return;
+      } else {
+        DO(x, P_swap(x));
+        I(TS(x))++;
+      }
+    } while(1);
+  });
+}
+
+void P_print_O(X* x) {
+	B buf[255];
+	I sz;
+	I i;
+	memset(buf, 0, sizeof(buf));
+	UF(x, 1, {
+		sz = dump_O(buf, TS(x));
+		for (i = 0; i < sz; i++) {
+			PUSHI(x, INT, buf[i]);
+			EMIT(x);
+		}
+		DROP(x);
+	});
+}
+
+/* Inner interpreter */
+
 void P_inner(X* x) {
 	B buf[255], op, l;
   I r = RP(x); 
@@ -1218,6 +1220,7 @@ void P_inner(X* x) {
         case 'e': EMIT(x); break;
         case 'r': P_read(x); break;
         case 'p': P_print(x); break;
+        case '_': P_print_O(x); break;
         case '+': P_add(x); break;
         case '-': P_sub(x); break;
         case '<': P_lt(x); break;
