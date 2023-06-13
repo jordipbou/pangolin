@@ -226,55 +226,6 @@ void EVAL(X* x, B* q) {
 }
 
 /*
-O* TO_R(X* x) {
-  O* s, * d;
-  UF1(x, { 
-    ROF1(x, {
-      RP(x)++;
-      s = TS(x);
-      d = TR(x);
-      T(d) = T(s);
-      C(d) = C(s);
-      I(t) = I(s);
-      SP(x)--;
-      return d;
-    })
-  })
-}
-
-I POP(X* x) { 
-  O* o;
-  I i;
-  UF1(x, {
-    o = TS(x);
-    i = I(o);
-    DROP(x);
-    return i;
-  })
-}
-
-#define POPF(x) UF1(x, { LPOPF(x->s); })
-
-#define RPUSH(x, v) ROF1(x, { LPUSHI(x->r, v); T(TR(x)) *= RETURN; })
-
-B* RPOP(X* x, I r) {
-  O* o;
-  while (RP(x) > r) {
-    o = TR(x);
-    if (o->t % RETURN == 0) {
-      return LPOPI(x->r);
-    } else {
-      DROP(x->r);
-    }
-  }
-  return 0;
-}
-
-#define CALL(x, d) if (IP(x) != 0 && *(IP(x) + 1) != 0 && *(IP(x) + 1) != ']') { RPUSH(x, IP(x)); } IP(x) = d
-*/
-/* External representation */
-/*
-
 void P_add(X* x) { UF2(x, { I(NS(x)) += I(TS(x)); SP(x)--; }); }
 void P_sub(X* x) { UF2(x, { I(NS(x)) -= I(TS(x)); SP(x)--; }); }
 void P_mul(X* x) { UF2(x, { I(NS(x)) *= I(TS(x)); SP(x)--; }); }
@@ -687,74 +638,7 @@ void P_take_last(X* x) {
   });
 }
 
-void P_print(X* x) {
-  O* s = TO_R(x);
-  I i;
-  for (i = 0; i < s->c; i++) {
-    PUSH(x, ((B*)s->v.i)[i]);
-    EMIT(x);
-  }
-}
 
-void P_read(X* x) {
-  B* s;
-  I c, i;
-  OF1(x, {
-    PUSH(x, 0);
-    do {
-      DO(x, KEY);
-      DO(x, P_dup);
-      DO(x, EMIT);
-      if (TS(x)->v.i == 10) {
-        POP(x);
-        c = POP(x);
-        s = (B*)Pmalloc(c);
-        for (i = c - 1; i >= 0; i--) {
-          s[i] = (B)POP(x); 
-        } 
-        PUSH(x, s);
-				TS(x)->c = c;
-        TS(x)->t *= I8*ARRAY*MANAGED;
-        return;
-      } else {
-        DO(x, P_swap);
-        TS(x)->v.i++;
-      }
-    } while(1);
-  });
-}
-
-void P_print_object(X* x) {
-	B buf[255];
-	I sz;
-	I i;
-	memset(buf, 0, sizeof buf);
-	UF1(x, {
-		sz = dump_o(buf, TS(x));
-		for (i = 0; i < sz; i++) {
-			PUSH(x, buf[i]);
-			EMIT(x);
-		}
-		POP(x);
-	});
-}
-
-void P_number(X* x) {
-	char *end, *end2;
-	F f;
-	I i;
-  f = strtod(x->ip, &end);
-  if (f == 0 && end == x->ip) {
-	} else {
-    i = strtol(x->ip, &end2, 0);
-		if (i == f && end == end2) {
-			PUSH(x, i);
-		} else {
-			PUSHF(x, f);
-		}
-	}
-	x->ip = end - 1;
-}
 
 I P_forward(X* x, I o, I c) {
 	I t = 1, n = 0;
@@ -865,27 +749,7 @@ void P_inner(X* x) {
 	} 
 }
 
-void P_repl(X* x) {
-	B buf[255];
 
-	do {
-		printf("IN: ");
-    memset(buf, 0, sizeof buf);
-		fgets(buf, 255, stdin);
-		x->ip = buf;
-		P_inner(x);
-		if (!x->tr) {
-			memset(buf, 0, sizeof buf);
-			dump_stack(buf, x, 1);
-			printf("\n--- Data stack\n%s", buf);
-		}
-		if (x->err == ERR_EXIT) { return; }
-		if (x->err != ERR_OK) {
-			printf("ERROR: %ld\n", x->err);
-			x->err = ERR_OK;
-		}
-	} while (1);
-}
 */
 
 
@@ -1166,6 +1030,19 @@ void P_read(X* x) {
         } 
         PUSHP(x, INT*I8*ARRAY*MANAGED, c, c, s);
         return;
+      } else if (I(TS(x)) == 127) {
+        DROP(x);
+        if (I(TS(x)) > 0) {
+          PUSHI(x, INT, '\b');
+          PUSHI(x, INT, ' ');
+          PUSHI(x, INT, '\b');
+          DO(x, EMIT(x));
+          DO(x, EMIT(x));
+          DO(x, EMIT(x));
+          I(TS(x))--;
+          DO(x, P_swap(x));
+          DROP(x);
+        }
       } else {
         DO(x, P_swap(x));
         I(TS(x))++;
@@ -1238,7 +1115,33 @@ void P_inner(X* x) {
 }
 
 void P_repl(X* x) {
-  
+	B buf[255];
+  I l;
+
+	do {
+    PUSHP(x, INT*I8*ARRAY, 4, 4, "IN: ");
+		DO(x, P_print(x));
+    memset(buf, 0, sizeof(buf));
+    DO(x, P_read(x));
+    EVAL(x, PB(TO_R(x)));
+		if (!TRACE(x)) {
+			memset(buf, 0, sizeof(buf));
+			l = dump_S(buf, x, 1);
+      PUSHP(x, INT*I8*ARRAY, l, l, buf);
+      PUSHP(x, INT*I8*ARRAY, 16, 16, "\n--- Data stack\n");
+      DO(x, P_print(x));
+      DO(x, P_print(x));
+		}
+		if (x->err == ERR_EXIT) { return; }
+		if (x->err != ERR_OK) {
+      PUSHP(x, INT*I8*ARRAY, 7, 7, "ERROR: ");
+      DO(x, P_print(x));
+      PUSHI(x, INT, ERROR(x));
+      DO(x, P_print(x));
+			x->err = ERR_OK;
+		}
+    R_DROP(x);
+	} while (1);
 }
 
 #endif
