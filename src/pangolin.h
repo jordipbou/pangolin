@@ -907,24 +907,23 @@ I dump_O(B* s, O* o) {
 		}
     DUMP("]");
 		return n;
-	}
-    /*
-  else if (IS(o, RET_ADDR)) { 
+	} else if (IS(o, RET_ADDR)) { 
     I i, t = 1, n = 0; 
     if (I(o) != 0) {
       DUMP_CODE(PB(o)); 
       return n; 
     }
-  }
-  */
-	else if (IS(o, INT)) { return sprintf(s, "%ld", I(o)); } 
-	else if (IS(o, FLOAT)) { return sprintf(s, "%g", F(o)); }
+  } else if (IS(o, INT)) { 
+		return sprintf(s, "%ld", I(o)); 
+	} else if (IS(o, FLOAT)) { 
+		return sprintf(s, "%g", F(o)); 
+	}
 }
 
 I dump_S(B* s, X* x, I nl) {
 	I i, t, n = 0;
 	for (i = 0; i < SP(x); i++) { 
-		if (nl) { s += t = sprintf(s, "[%c] ", IS(PK(x, i), MANAGED == 0) ? 'M' : ' '); n += t; }
+		if (nl) { s += t = sprintf(s, "[%c] ", IS(PK(x, i), MANAGED) ? 'M' : ' '); n += t; }
 		if (nl) { s += t = sprintf(s, "%08X ", (unsigned int)I(PK(x, i))); n += t; }
 		s += t = dump_O(s, PK(x, i)); 
 		*s++ = nl ? '\n' : ' '; 

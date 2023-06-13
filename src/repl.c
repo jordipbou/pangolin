@@ -53,6 +53,6 @@ int main() {
   x->ip = "3.1415 11[Hello world!]";
   P_inner(x);
   memset(buf, 0, sizeof(buf));
-  dump_S(buf, TS(x), 1);
+  dump_S(buf, x, 1);
   printf("%s\n", buf);
 }
