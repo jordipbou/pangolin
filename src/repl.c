@@ -36,20 +36,35 @@ int _getch ()
 }
 #endif
 
-void key(X* x) { OF(x, 1, { PUSHI(x, INT, _getch()); }); }
+void key(X* x) { OF(x, 1, { PUSHI(x, _getch()); }); }
 void emit(X* x) { UF(x, 1, { printf("%c", (B)POPI(x)); }); }
 
-int main() {
+int main(int argc, char* argv[]) {
+	FILE *fptr;
 	B buf[255];
 	X* x = init();
 
 	x->k = &key;
 	x->e = &emit;
 
-	x->tr = 1;
+	x->tr = 0;
   x->lw = 20;
 
-	P_repl(x);
+	if (argc == 2 || argc == 3) {
+		fptr = fopen(argv[1], "r");
+		while (fgets(buf, 255, fptr)) {
+			EVAL(x, buf);
+			if (ERROR(x) != ERR_OK && ERROR(x) != ERR_EXIT) {
+					printf("ERROR: %ld\n", x->err);
+					return;
+			}
+			x->err = 0;
+		}
+	}
+
+	if (argc == 1 || argc == 3) {
+		P_repl(x);
+	}
 
   /* x->ip = "3.1415d11d[Hello world!]dso"; */
 	/*x->ip = "1 1 34[so+]ts\\";*/

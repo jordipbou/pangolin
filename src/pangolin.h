@@ -1,3 +1,6 @@
+/* TODO: Add iota/numbers n# from 0 to n-1 or from n-1 to 0 if negative n#. from -n to n */
+/* TODO: Make spp04 work again */
+
 #ifndef PANGOLIN_H
 #define PANGOLIN_H
 
@@ -39,6 +42,8 @@ enum {
   RET_ADDR = 41
 } TYPE;
 
+#define STRING (INT*I8*ARRAY)
+
 typedef struct {
   I type;
   I capacity;
@@ -53,8 +58,6 @@ typedef struct {
 #define T(o) ((o)->type)
 
 #define IS(o, t) (T(o) % t == 0)
-#define ARE(o1, t1, o2, t2) (IS(o1, t1) && IS(o2, t2))
-#define BOTH(o1, o2, t) (ARE(o1, t, o2, t))
 #define WITH(ts, t) (ts % t == 0 ? ts : ts*t)
 
 #define C(o) ((o)->capacity)
@@ -163,6 +166,8 @@ void P_inner(X*);
 #define ERR_ALLOCATION          -7
 #define ERR_EXIT								-8
 #define ERR_END_OF_CODE         -9
+#define ERR_TYPE_ERROR					-10
+#define ERR_DIFFERENT_SIZES			-11
 
 I handle(X* x, I err) {
   ERROR(x) = err;
@@ -181,10 +186,15 @@ I handle(X* x, I err) {
 
 #define DZ(x, b) ERR(x, I(TS(x)) == 0, ERR_DIVIDE_BY_ZERO, b)
 
+#define ARE(x, t1, t2, b) ERR(x, !(IS(TS(x), t1) && IS(NS(x), t2)), ERR_TYPE_ERROR, b)
+#define BOTH(x, t, b) ERR(x, !(IS(TS(x), t) && IS(NS(x), t)), ERR_TYPE_ERROR, b)
+
+#define SAME_SIZE(x, b) ERR(x, (C(TS(x)) == C(NS(x))), ERR_DIFFERENT_SIZES, b)
+
 #define DO(x, f) f; if (ERROR(x)) { return; }
 
-#define PUSHI(x, t, v) setOI(Oat(x->s, S(x->s)++), t, v)
-#define PUSHF(x, t, v) setOF(Oat(x->s, S(x->s)++), t, v)
+#define PUSHI(x, v) setOI(Oat(x->s, S(x->s)++), INT, v)
+#define PUSHF(x, v) setOF(Oat(x->s, S(x->s)++), FLOAT, v)
 #define PUSHP(x, t, c, sz, p) setOP(Oat(x->s, S(x->s)++), t, c, sz, p)
 void DROP(X* x) { 
   if (IS(TS(x), MANAGED)) { Pfree(P(TS(x))); /* Free recursively */ }
@@ -226,73 +236,6 @@ void EVAL(X* x, B* q) {
 }
 
 /*
-void P_add(X* x) { UF2(x, { I(NS(x)) += I(TS(x)); SP(x)--; }); }
-void P_sub(X* x) { UF2(x, { I(NS(x)) -= I(TS(x)); SP(x)--; }); }
-void P_mul(X* x) { UF2(x, { I(NS(x)) *= I(TS(x)); SP(x)--; }); }
-void P_div(X* x) { UF2(x, { DZ(x, { I(NS(x)) /= I(TS(x)); SP(x)--; }); }); }
-void P_mod(X* x) { UF2(x, { I(NS(x)) %= I(TS(x)); SP(x)--; }); }
-void P_lt(X* x) { UF2(x, { I(NS(x)) = I(NS(x)) < I(TS(x)); SP(x)--; }); }
-void P_eq(X* x) { UF2(x, { I(NS(x)) = I(NS(x)) == I(TS(x)); SP(x)--; }); }
-void P_gt(X* x) { UF2(x, { I(NS(x)) = I(NS(x)) > I(TS(x)); SP(x)--; }); }
-void P_and(X* x) { UF2(x, { I(NS(x)) = I(NS(x)->v.i) & I(TS(x)); SP(x)--; }); }
-void P_or(X* x) { UF2(x, { I(NS(x)) = I(NS(x)) | I(TS(x)); SP(x)--; }); }
-void P_not(X* x) { UF1(x, { I(TS(x)) = !I(TS(x)); }); }
-void P_dup(X* x) { 
-  UF1(x, {
-    OF1(x, {
-	    if (T(TS(x)) % ARRAY == 0) {
-	      I sz;
-        void* a;
-	      if (T(TS(x)) % I8 == 0) sz = 1;
-	      else if (T{TS(x)) % I16 == 0) sz = 2;
-	      else if (T(TS(x)) % I32 == 0) sz = 4;
-	      else if (T(TS(x)) % I64 == 0) sz = 8;
-	      a = Pmalloc(C(TS(x)) * sz);
-	      PUSH(x, a);
-	      T(TS(x)) = T(NS(x)) % MANAGED == 0 ? T(NS(x)) : T(NS(x)) * MANAGED;
-	      C(TS(x)) = C(NS(x));
-	      memcpy(aB(TS(x)), aB(NS(x), C(NS(x)) * sz);
-	    } else {
-	      I i = I(TS(x)); PUSH(x, i); T(TS(x)) = T(NS(x)); C(TS(x)) = C(NS(x));
-	    }
-    });
-  });
-}
-
-void P_swap(X* x) { 
-  UF2(x, {
-	  I t = I(TS(x)); I(TS(x)) = I(NS(x)); I(NS(x)) = t; 
-	  t = T(TS(x)); T(TS(x)) = T(NS(x)); T(NS(x)) = t;
-	  t = C(TS(x)); C(TS(x)) = C(NS(x)); C(NS(x)) = t;
-  });
-}
-void P_rot(X* x) { 
-	UF3(x, {
-		I t = I(TS(x)); I(TS(x)) = I(NNS(x)); I(NNS(x)) = I(NS(x)); I(NS(x)) = t;
-		t = T(TS(x)); T(TS(x)) = T(NNS(x)); T(NNS(x)) = T(NS(x)); T(NS(x)) = t;
-		t = C(TS(x)); C(TS(x)) = C(NNS(x)); C(NNS(x)) = C(NS(x)); C(NS(x)) = t;
-	});
-}
-
-void P_over(X* x) {
-  UF2(x, {
-		if (T(NS(x)) % ARRAY == 0) {
-			DO(x, P_swap);
-			DO(x, P_dup);
-			DO(x, P_rot);
-			DO(x, P_rot);
-		} else if (T(NS(x)) % INT == 0) {
-			I i = I(NS(x));
-	    PUSH(x, i);
-			T(TS(x)) = T(NNS(x));
-		} else if (T(NS(x)) % FLOAT == 0) {
-			F f = F(NS(x));
-			PUSHF(x, f);
-			T(TS(x)) = T(NNS(x));
-		}
-  })
-}
-
 void P_exec_i(X* x) { B* q = aB(TO_R(x)); CALL(x, q - 1); }
 
 void P_ifthen(X* x, I c, B* t, B* e) { CALL(x, (c ? t : e) - 1); }
@@ -748,8 +691,6 @@ void P_inner(X* x) {
     IP(x)++;
 	} 
 }
-
-
 */
 
 
@@ -833,7 +774,7 @@ I dump(B* s, X* x) {
 
 	memset(r, 0, sizeof r);
 	n = dump_S(r, x, 0);
-	s += t = sprintf(s, "%*s: ", LINE_WIDTH(x), r);
+	s += t = sprintf(s, "%*s: ", (int)LINE_WIDTH(x), r);
   n += t;
 	s += t = dump_R(s, x);
 	n += t;
@@ -856,9 +797,9 @@ void P_parseLiteral(X* x) {
         d = d + mult*((F)(GET_TOKEN(x) - '0')); 
         mult /= 10;
       }
-      PUSHF(x, FLOAT, d);
+      PUSHF(x, d);
     } else {
-      PUSHI(x, INT, n); 
+      PUSHI(x, n); 
     }
   });
 }
@@ -877,7 +818,7 @@ void P_parseQuotation(X* x) {
       if (c == '[') t++;
       if (c == ']') t--;
     } 
-    PUSHP(x, INT*I8*ARRAY, l, l, s);
+    PUSHP(x, STRING, l, l, s);
   });
 }
 
@@ -885,7 +826,7 @@ void P_add(X* x) {
   UF(x, 2, {
     I b = POPI(x);
     I a = POPI(x);
-    PUSHI(x, INT, a + b);
+    PUSHI(x, a + b);
   });
 }
 
@@ -893,16 +834,48 @@ void P_sub(X* x) {
   UF(x, 2, {
     I b = POPI(x);
     I a = POPI(x);
-    PUSHI(x, INT, a - b);
+    PUSHI(x, a - b);
   });
+}
+
+void P_or(X* x) {
+	UF(x, 2, {
+		I b = POPI(x);
+		I(TS(x)) |= b;
+	});
 }
 
 void P_lt(X* x) {
   UF(x, 2, {
     I b = POPI(x);
     I a = POPI(x);
-    PUSHI(x, INT, a < b);
+    PUSHI(x, a < b);
   });
+}
+
+void P_eq(X* x) {
+  UF(x, 2, {
+		O* b = TO_R(x);
+		O* a = TO_R(x);
+		I i;
+		I r = 0;
+		if (IS(a, ARRAY) && IS(b, ARRAY)) {
+			if (C(a) == C(b)) {
+				r = 1;
+				if (IS(a, I8) && IS(b, I8)) {
+					for (i = 0; i < C(a); i++) {
+						if (Bat(a, i) != Bat(b, i)) {
+							r = 0;
+							break;
+						}
+					}
+				}
+			}
+		} else if (IS(a, INT) && IS(b, INT)) {
+			r = I(a) == I(b);
+		}
+		PUSHI(x, r);
+	});
 }
 
 void P_swap(X* x) {
@@ -964,6 +937,17 @@ void P_drop(X* x) {
 	});
 }
 
+void P_if(X* x) {
+	UF(x, 3, {
+	  BOTH(x, INT*I8*ARRAY, {
+			B* e = PB(TO_R(x));
+			B* t = PB(TO_R(x));
+			if (POPI(x)) { EVAL(x, t); }
+			else { EVAL(x, e); }
+		});
+	});
+}
+
 void P_times(X* x) {
 	UF(x, 2, {
 		B* q = PB(TO_R(x));
@@ -995,6 +979,51 @@ void P_bin_rec(X* x) {
 	});
 }
 
+void P_zip(X* x) {
+  OF(x, 2, {
+		BOTH(x, ARRAY, {
+		  SAME_SIZE(x, {
+				B* q = PB(TO_R(x));
+				O* b = TO_R(x);
+				O* a = TS(x);
+				I i;
+				for (i = 0; i < C(a); i++) {
+					/* TODO: Only I8 here !!! */
+					PUSHI(x, Bat(a, i));
+					PUSHI(x, Bat(b, i));
+					EVAL(x, q);
+					Bat(a, i) = (B)POPI(x);
+				}
+			/*	
+    		I i;
+    		I l = NS(x)->c;
+				if (T(TS(x)) % I8 == 0 && T(NS(x)) % I8 == 0) {
+					B* a = aB(NS(x));
+    			B* b = aB(TS(x));
+    			for (i = 0; i < l; i++) {
+    			  PUSH(x, a[i]);
+    			  PUSH(x, b[i]);
+    			  CALL(x, q); DO(x, P_inner);
+    			  a[i] = (B)POP(x);
+    			}
+    			POP(x);
+				} else if (T(TS(x)) % I64 == 0 && T(NS(x)) % I64 == 0) {
+					I* a = aI(NS(x));
+    			I* b = aI(TS(x));
+    			for (i = 0; i < l; i++) {
+    			  PUSH(x, a[i]);
+    			  PUSH(x, b[i]);
+    			  CALL(x, q); DO(x, P_inner);
+    			  a[i] = POP(x);
+    			}
+    			POP(x);
+				}
+				*/
+			});
+		});
+  });
+}
+
 /* Input/output */
 
 void P_print(X* x) {
@@ -1003,7 +1032,7 @@ void P_print(X* x) {
       O* s = TO_R(x);
       I i;
       for (i = 0; i < S(s); i++) {
-        PUSHI(x, INT, Bat(s, i));
+        PUSHI(x, Bat(s, i));
         EMIT(x);
       }
       R_DROP(x);
@@ -1015,9 +1044,22 @@ void P_read(X* x) {
   B* s;
   I c, i;
   OF(x, 1, {
-    PUSHI(x, INT, 0);
+    PUSHI(x, 0);
     do {
       DO(x, KEY(x));
+			/* TODO: Manage control codes !!! */
+			/*
+			if (I(TS(x)) == 27) {
+				DROP(x);
+				DO(x, KEY(x));
+				if (I(TS(x)) == 91) {
+					DROP(x);
+					DO(x, KEY(x));
+					DROP(x);
+					DO(x, KEY(x));
+				}
+			}
+			*/
       DO(x, P_dup(x));
       DO(x, EMIT(x));
       if (I(TS(x)) == 10) {
@@ -1028,14 +1070,14 @@ void P_read(X* x) {
         for (i = c - 1; i >= 0; i--) {
           s[i] = (B)POPI(x); 
         } 
-        PUSHP(x, INT*I8*ARRAY*MANAGED, c, c, s);
+        PUSHP(x, STRING*MANAGED, c, c, s);
         return;
       } else if (I(TS(x)) == 127) {
         DROP(x);
         if (I(TS(x)) > 0) {
-          PUSHI(x, INT, '\b');
-          PUSHI(x, INT, ' ');
-          PUSHI(x, INT, '\b');
+          PUSHI(x, '\b');
+          PUSHI(x, ' ');
+          PUSHI(x, '\b');
           DO(x, EMIT(x));
           DO(x, EMIT(x));
           DO(x, EMIT(x));
@@ -1059,7 +1101,7 @@ void P_print_O(X* x) {
 	UF(x, 1, {
 		sz = dump_O(buf, TS(x));
 		for (i = 0; i < sz; i++) {
-			PUSHI(x, INT, buf[i]);
+			PUSHI(x, buf[i]);
 			EMIT(x);
 		}
 		DROP(x);
@@ -1075,7 +1117,7 @@ void P_inner(X* x) {
 		if (TRACE(x)) {	
       memset(buf, 0, sizeof buf); 
       l = dump(buf, x);	
-      PUSHP(x, INT*I8*ARRAY, l, l, buf); 
+      PUSHP(x, STRING, l, l, buf); 
       DO(x, P_print(x)); 
     }
     op = PEEK_TOKEN(x);
@@ -1093,21 +1135,31 @@ void P_inner(X* x) {
     default:
       op = GET_TOKEN(x);
       switch (op) {
-        case 'k': KEY(x); break;
-        case 'e': EMIT(x); break;
-        case 'r': P_read(x); break;
-        case 'p': P_print(x); break;
-        case '_': P_print_O(x); break;
-        case '+': P_add(x); break;
-        case '-': P_sub(x); break;
-        case '<': P_lt(x); break;
-        case 's': P_swap(x); break;
-        case 'd': P_dup(x); break;
-				case '@': P_rot(x); break;
-        case 'o': P_over(x); break;
-        case '\\': P_drop(x); break;
-        case 't': P_times(x); break;
-        case 'b': P_bin_rec(x); break;
+			case 'q': ERROR(x) = ERR_EXIT; break;
+      case 'k': KEY(x); break;
+      case 'e': EMIT(x); break;
+      case 'r': P_read(x); break;
+      case 'p': P_print(x); break;
+      case '_': P_print_O(x); break;
+      case '+': P_add(x); break;
+      case '-': P_sub(x); break;
+			case '|': P_or(x); break;
+      case '<': P_lt(x); break;
+			case '=': P_eq(x); break;
+      case 's': P_swap(x); break;
+      case 'd': P_dup(x); break;
+			case '@': P_rot(x); break;
+      case 'o': P_over(x); break;
+      case '\\': P_drop(x); break;
+			case '?': P_if(x); break;
+      case 't': P_times(x); break;
+      case 'b': P_bin_rec(x); break;
+			case 'z': P_zip(x); break;
+			case '`':
+			  op = GET_TOKEN(x);
+				switch (op) {
+				case 't': TRACE(x) = !TRACE(x); break;
+				}
       }
     }
     if (ERROR(x)) return;
@@ -1119,7 +1171,7 @@ void P_repl(X* x) {
   I l;
 
 	do {
-    PUSHP(x, INT*I8*ARRAY, 4, 4, "IN: ");
+    PUSHP(x, STRING, 4, 4, "IN: ");
 		DO(x, P_print(x));
     memset(buf, 0, sizeof(buf));
     DO(x, P_read(x));
@@ -1127,16 +1179,16 @@ void P_repl(X* x) {
 		if (!TRACE(x)) {
 			memset(buf, 0, sizeof(buf));
 			l = dump_S(buf, x, 1);
-      PUSHP(x, INT*I8*ARRAY, l, l, buf);
-      PUSHP(x, INT*I8*ARRAY, 16, 16, "\n--- Data stack\n");
+      PUSHP(x, STRING, l, l, buf);
+      PUSHP(x, STRING, 16, 16, "\n--- Data stack\n");
       DO(x, P_print(x));
       DO(x, P_print(x));
 		}
 		if (x->err == ERR_EXIT) { return; }
 		if (x->err != ERR_OK) {
-      PUSHP(x, INT*I8*ARRAY, 7, 7, "ERROR: ");
+      PUSHP(x, STRING, 7, 7, "ERROR: ");
       DO(x, P_print(x));
-      PUSHI(x, INT, ERROR(x));
+      PUSHI(x, ERROR(x));
       DO(x, P_print(x));
 			x->err = ERR_OK;
 		}
